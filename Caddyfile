@@ -1,0 +1,37 @@
+# Caddy reverse proxy for nova-opencode
+# Consolidates OpenCode web UI (4096) and MCP bridge (8081) behind
+# a single port (8080) under the BASE_PATH prefix.
+#
+# {$BASE_PATH} is set via environment variable (default: /cell/nova-opencode)
+
+:8080 {
+	# Serve the app icon statically
+	handle {$BASE_PATH}/app_icon.svg {
+		root * /app/static
+		rewrite * /app_icon.svg
+		file_server
+	}
+
+	# MCP bridge endpoint — strip prefix, proxy to internal MCP server
+	handle_path {$BASE_PATH}/mcp/* {
+		reverse_proxy localhost:8081
+	}
+	handle_path {$BASE_PATH}/mcp {
+		reverse_proxy localhost:8081
+	}
+
+	# OpenCode web UI — strip prefix, proxy to OpenCode server
+	handle_path {$BASE_PATH}/* {
+		reverse_proxy localhost:4096
+	}
+
+	# Bare path redirect (no trailing slash)
+	handle {$BASE_PATH} {
+		redir {$BASE_PATH}/ permanent
+	}
+
+	# Health check (for the operator/k8s probes)
+	handle /health {
+		respond "ok" 200
+	}
+}

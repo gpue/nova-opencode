@@ -22,7 +22,7 @@ OPENCODE_HOST = os.environ.get("OPENCODE_HOST", "127.0.0.1")
 OPENCODE_PORT = os.environ.get("OPENCODE_PORT", "4096")
 OPENCODE_BASE = f"http://{OPENCODE_HOST}:{OPENCODE_PORT}"
 
-MCP_BRIDGE_PORT = int(os.environ.get("MCP_BRIDGE_PORT", "8080"))
+MCP_BRIDGE_PORT = int(os.environ.get("MCP_BRIDGE_PORT", "8081"))
 BASE_PATH = os.environ.get("BASE_PATH", "/cell/nova-opencode")
 
 # Optional auth for the OpenCode server
