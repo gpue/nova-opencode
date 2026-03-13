@@ -1,0 +1,8 @@
+# nova-opencode — AI coding assistant for the Nova robotics platform
+name: nova-opencode
+type: app
+port: 8080
+appIcon: app_icon.svg
+storage:
+  capacity: 1Gi
+  mountPath: /workspace
