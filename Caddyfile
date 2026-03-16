@@ -5,6 +5,12 @@
 # {$BASE_PATH} is set via environment variable (default: /cell/nova-opencode)
 
 :8080 {
+	# Health check — must come before catch-all proxy handlers.
+	# The operator probes {BASE_PATH}/health, not /health.
+	handle {$BASE_PATH}/health {
+		respond "ok" 200
+	}
+
 	# Serve the app icon statically
 	handle {$BASE_PATH}/app_icon.svg {
 		root * /app/static
@@ -30,7 +36,7 @@
 		redir {$BASE_PATH}/ permanent
 	}
 
-	# Health check (for the operator/k8s probes)
+	# Fallback health check (bare /health, no prefix)
 	handle /health {
 		respond "ok" 200
 	}

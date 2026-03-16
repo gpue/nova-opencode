@@ -49,9 +49,10 @@ RUN groupadd -r opencode && useradd -r -g opencode -m -d /home/opencode opencode
 # ── Directory structure ─────────────────────────────────────────────
 RUN mkdir -p /workspace \
     && mkdir -p /home/opencode/.config/opencode \
+    && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /app/static \
-    && mkdir -p /config/caddy /data/caddy \
-    && chown -R opencode:opencode /workspace /home/opencode /app /config/caddy /data/caddy
+    && mkdir -p /caddy/config /caddy/data \
+    && chown -R opencode:opencode /workspace /home/opencode /app /caddy
 
 # ── Copy application files ──────────────────────────────────────────
 COPY --chown=opencode:opencode opencode.json /home/opencode/.config/opencode/opencode.json
@@ -63,9 +64,9 @@ COPY --chown=opencode:opencode workspace/ /workspace/
 
 RUN chmod +x /app/start-opencode.sh
 
-# Caddy needs these for its data/config dirs
-ENV XDG_CONFIG_HOME=/config
-ENV XDG_DATA_HOME=/data
+# Do NOT set XDG_CONFIG_HOME / XDG_DATA_HOME globally — OpenCode and Caddy
+# both use XDG conventions but need separate data dirs.  The start script
+# sets per-process env vars instead.
 
 USER opencode
 WORKDIR /workspace

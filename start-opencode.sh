@@ -27,7 +27,9 @@ trap cleanup EXIT INT TERM
 python3 /app/mcp_bridge.py &
 MCP_PID=$!
 
-# Start OpenCode web UI in the background
+# Start OpenCode web UI in the background.
+# OpenCode uses XDG conventions — default XDG_DATA_HOME is ~/.local/share
+# which is writable for the opencode user.  We don't override it here.
 opencode web \
     --port "${OPENCODE_PORT}" \
     --hostname 127.0.0.1 \
@@ -37,5 +39,8 @@ OPENCODE_PID=$!
 # Give services a moment to start
 sleep 2
 
-# Start Caddy reverse proxy in the foreground
-exec caddy run --config /app/Caddyfile --adapter caddyfile
+# Start Caddy reverse proxy in the foreground.
+# Caddy needs its own config/data dirs — use per-process env vars
+# to avoid conflicting with OpenCode's XDG directories.
+exec env XDG_CONFIG_HOME=/caddy/config XDG_DATA_HOME=/caddy/data \
+    caddy run --config /app/Caddyfile --adapter caddyfile
