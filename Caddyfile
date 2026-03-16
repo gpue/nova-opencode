@@ -115,7 +115,7 @@
 					"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
 					# Keep the custom preload script fresh as it fixes stale local
 					# storage before the main bundle runs.
-					"/cell/nova-opencode/oc-theme-preload.js" "/cell/nova-opencode/oc-theme-preload.js?v=4"
+					"/cell/nova-opencode/oc-theme-preload.js" "/cell/nova-opencode/oc-theme-preload.js?v=5"
 				}
 			}
 		}

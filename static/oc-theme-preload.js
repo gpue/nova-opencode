@@ -1,5 +1,7 @@
 ;(function () {
   var serverKey = "opencode.settings.dat:defaultServerUrl"
+  var layoutKey = "opencode.global.dat:layout"
+  var legacyLayoutKey = "layout.v6"
   var script = document.currentScript
   var basePath = ""
 
@@ -27,6 +29,11 @@
       localStorage.removeItem(serverKey)
     } catch {}
   }
+
+  try {
+    localStorage.removeItem(layoutKey)
+    localStorage.removeItem(legacyLayoutKey)
+  } catch {}
 
   var key = "opencode-theme-id"
   var themeId = localStorage.getItem(key) || "oc-2"
