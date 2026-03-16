@@ -4,10 +4,10 @@
 #
 # {$BASE_PATH} is set via environment variable (default: /cell/nova-opencode)
 #
-# OpenCode serves all assets from "/" (root-relative). Since we serve
-# behind a sub-path, we inject <base href="{BASE_PATH}/"> into the HTML
-# <head> using the replace-response module so the browser resolves asset
-# URLs correctly.
+# OpenCode serves all assets and API endpoints from "/" (root-relative).
+# Since we serve behind a sub-path, we use the replace-response module to
+# rewrite root-relative paths in HTML/JS/CSS responses so the browser
+# fetches them from the correct sub-path prefix.
 
 {
 	order replace after encode
@@ -36,13 +36,27 @@
 	}
 
 	# OpenCode web UI — strip prefix, proxy to OpenCode server.
-	# Inject <base href> so root-relative asset paths resolve under BASE_PATH.
+	# Rewrite root-relative asset paths in HTML responses so the browser
+	# fetches them from under the sub-path prefix.  We also inject a
+	# <base href> tag so Vite's dynamic imports (which use document.baseURI)
+	# resolve correctly.
 	handle_path {$BASE_PATH}/* {
 		reverse_proxy localhost:4096 {
+			# Prevent upstream from compressing responses — the replace
+			# module cannot operate on compressed content.
 			header_up Accept-Encoding identity
 		}
 		replace {
+			# Inject <base href> for Vite dynamic imports (uses document.baseURI)
 			"<head>" "<head><base href=\"{$BASE_PATH}/\">"
+			# Rewrite root-relative paths in HTML attributes
+			"src=\"/" "src=\"{$BASE_PATH}/"
+			"href=\"/" "href=\"{$BASE_PATH}/"
+			"content=\"/" "content=\"{$BASE_PATH}/"
+			# Rewrite root-relative asset paths in JS (fonts, workers)
+			"\"/assets/" "\"{$BASE_PATH}/assets/"
+			# Rewrite root-relative asset paths in CSS url() references
+			"(/assets/" "({$BASE_PATH}/assets/"
 		}
 	}
 
