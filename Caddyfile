@@ -33,6 +33,15 @@
 		file_server
 	}
 
+	# Serve a custom preload script that normalizes stale persisted server URLs
+	# before the main bundle starts.
+	handle {$BASE_PATH}/oc-theme-preload.js {
+		root * /app/static
+		rewrite * /oc-theme-preload.js
+		header Cache-Control "no-store"
+		file_server
+	}
+
 	# MCP bridge endpoint — strip prefix, proxy to internal MCP server
 	handle_path {$BASE_PATH}/mcp/* {
 		reverse_proxy localhost:8081
@@ -62,6 +71,7 @@
 				reverse_proxy localhost:4096 {
 					header_up Accept-Encoding identity
 				}
+				header Cache-Control "no-store"
 				replace {
 					# Rewrite root-relative paths in HTML attributes
 					"src=\"/" "src=\"{$BASE_PATH}/"
@@ -74,6 +84,10 @@
 					# Rewrite the API base URL so the JS client prepends the
 					# sub-path prefix.
 					"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
+					# Bust immutable browser caches when proxy rewrites change.
+					"/cell/nova-opencode/oc-theme-preload.js" "/cell/nova-opencode/oc-theme-preload.js?v=3"
+					"/cell/nova-opencode/assets/index-Dwzj_leU.js" "/cell/nova-opencode/assets/index-Dwzj_leU.js?v=669245b"
+					"/cell/nova-opencode/assets/index-BOAxYkFy.css" "/cell/nova-opencode/assets/index-BOAxYkFy.css?v=669245b"
 				}
 			}
 		}

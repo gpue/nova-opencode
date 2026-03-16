@@ -68,6 +68,7 @@ COPY --chown=opencode:opencode mcp_bridge.py /app/mcp_bridge.py
 COPY --chown=opencode:opencode start-opencode.sh /app/start-opencode.sh
 COPY --chown=opencode:opencode Caddyfile /app/Caddyfile
 COPY --chown=opencode:opencode app_icon.svg /app/static/app_icon.svg
+COPY --chown=opencode:opencode static/ /app/static/
 COPY --chown=opencode:opencode workspace/ /workspace/
 
 RUN chmod +x /app/start-opencode.sh
