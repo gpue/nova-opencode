@@ -50,10 +50,11 @@
 		reverse_proxy localhost:8081
 	}
 
-	# Versioned asset alias to defeat stale edge caches. Requests under this
-	# path are rewritten back to OpenCode's real /assets/* paths.
-	handle {$BASE_PATH}/assets-v-b360b34/* {
-		uri replace {$BASE_PATH}/assets-v-b360b34/ /assets/
+	# Versioned asset alias to defeat stale edge caches. After handle_path
+	# strips {$BASE_PATH}/assets-v-b360b34, rewrite the remainder back under
+	# OpenCode's real /assets/* tree.
+	handle_path {$BASE_PATH}/assets-v-b360b34/* {
+		rewrite * /assets{uri}
 		reverse_proxy localhost:4096 {
 			header_up Accept-Encoding identity
 		}
