@@ -63,7 +63,7 @@
 			"\"/assets/" "\"{$BASE_PATH}/assets-v-b360b34/"
 			"(/assets/" "({$BASE_PATH}/assets-v-b360b34/"
 			"sidebar:{opened:!1" "sidebar:{opened:!0"
-			"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()??c.projects.list()[0]},get children(){return v(wh,{project:()=>St()??c.projects.list()[0],merged:!0})}})"
+			"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(wh,{project:St,merged:!0})"
 			"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
 		}
 	}
@@ -106,10 +106,10 @@
 					# Default the desktop sidebar to open so first-load users see the
 					# onboarding/project UI instead of an empty content pane.
 					"sidebar:{opened:!1" "sidebar:{opened:!0"
-					# The desktop panel renders nothing until an active project is
-					# resolved. Fall back to the first project so first load shows
-					# actual content instead of an empty pane.
-					"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()??c.projects.list()[0]},get children(){return v(wh,{project:()=>St()??c.projects.list()[0],merged:!0})}})"
+					# Desktop mounted an empty panel until an active project was
+					# resolved. Render the sidebar panel unconditionally, like the
+					# mobile branch, so onboarding/fallback content appears.
+					"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(wh,{project:St,merged:!0})"
 					# Rewrite the API base URL so the JS client prepends the
 					# sub-path prefix.
 					"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
