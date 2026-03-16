@@ -3,6 +3,15 @@
 # a single port (8080) under the BASE_PATH prefix.
 #
 # {$BASE_PATH} is set via environment variable (default: /cell/nova-opencode)
+#
+# OpenCode serves all assets from "/" (root-relative). Since we serve
+# behind a sub-path, we inject <base href="{BASE_PATH}/"> into the HTML
+# <head> using the replace-response module so the browser resolves asset
+# URLs correctly.
+
+{
+	order replace after encode
+}
 
 :8080 {
 	# Health check — must come before catch-all proxy handlers.
@@ -26,9 +35,15 @@
 		reverse_proxy localhost:8081
 	}
 
-	# OpenCode web UI — strip prefix, proxy to OpenCode server
+	# OpenCode web UI — strip prefix, proxy to OpenCode server.
+	# Inject <base href> so root-relative asset paths resolve under BASE_PATH.
 	handle_path {$BASE_PATH}/* {
-		reverse_proxy localhost:4096
+		reverse_proxy localhost:4096 {
+			header_up Accept-Encoding identity
+		}
+		replace {
+			"<head>" "<head><base href=\"{$BASE_PATH}/\">"
+		}
 	}
 
 	# Bare path redirect (no trailing slash)

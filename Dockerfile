@@ -7,12 +7,22 @@
 #   - git, Python 3, Nova CLI pre-installed in the workspace
 # ------------------------------------------------------------------
 
+# ── Stage 1: Build custom Caddy with replace-response module ───────
+# The replace-response module lets us inject <base href> into OpenCode's
+# HTML so assets resolve correctly when served behind a sub-path prefix.
+ARG CADDY_VERSION=2.9.1
+FROM caddy:${CADDY_VERSION}-builder AS caddy-builder
+ARG CADDY_VERSION=2.9.1
+RUN xcaddy build v${CADDY_VERSION} \
+        --with github.com/caddyserver/replace-response \
+        --output /usr/local/bin/caddy
+
+# ── Stage 2: Final image ───────────────────────────────────────────
 FROM debian:bookworm-slim
 
 # ── Versions ────────────────────────────────────────────────────────
 ARG OPENCODE_VERSION=1.2.25
 ARG NOVA_CLI_VERSION=0.0.224
-ARG CADDY_VERSION=2.9.1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -28,10 +38,8 @@ RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/v${OPENC
     | tar -xz -C /usr/local/bin \
     && chmod +x /usr/local/bin/opencode
 
-# ── Install Caddy (reverse proxy) ──────────────────────────────────
-RUN curl -fsSL "https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_amd64.tar.gz" \
-    | tar -xz -C /usr/local/bin caddy \
-    && chmod +x /usr/local/bin/caddy
+# ── Copy custom Caddy binary from builder stage ───────────────────
+COPY --from=caddy-builder /usr/local/bin/caddy /usr/local/bin/caddy
 
 # ── Install Nova CLI (Go binary from GitHub Releases) ──────────────
 RUN curl -fsSL "https://github.com/wandelbotsgmbh/nova-cli/releases/download/${NOVA_CLI_VERSION}/novacli_linux_amd64-${NOVA_CLI_VERSION}.tar.gz" \
