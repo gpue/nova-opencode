@@ -42,30 +42,40 @@
 	}
 
 	# OpenCode web UI — strip prefix, proxy to OpenCode server.
-	# Rewrite root-relative asset paths in HTML responses so the browser
-	# fetches them from under the sub-path prefix.  We also inject a
-	# <base href> tag so Vite's dynamic imports (which use document.baseURI)
-	# resolve correctly.
+	# Rewrite root-relative asset paths in HTML/JS/CSS responses so the
+	# browser fetches them from under the sub-path prefix.
+	#
+	# SSE endpoints (/event, /global/event) are proxied WITHOUT the replace
+	# module because replace buffers the entire response body, which blocks
+	# streaming (SSE responses never end).  We use separate handle blocks
+	# inside a route to ensure SSE requests bypass the replace handler.
 	handle_path {$BASE_PATH}/* {
-		reverse_proxy localhost:4096 {
-			# Prevent upstream from compressing responses — the replace
-			# module cannot operate on compressed content.
-			header_up Accept-Encoding identity
-		}
-		replace {
-			# Rewrite root-relative paths in HTML attributes
-			"src=\"/" "src=\"{$BASE_PATH}/"
-			"href=\"/" "href=\"{$BASE_PATH}/"
-			"content=\"/" "content=\"{$BASE_PATH}/"
-			# Rewrite root-relative asset paths in JS (fonts, workers)
-			"\"/assets/" "\"{$BASE_PATH}/assets/"
-			# Rewrite root-relative asset paths in CSS url() references
-			"(/assets/" "({$BASE_PATH}/assets/"
-			# Rewrite the API base URL so the JS client prepends the sub-path
-			# prefix.  The origin detection function returns location.origin,
-			# which is just the scheme+host — we append the base path so API
-			# calls go to /cell/nova-opencode/session instead of /session.
-			"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
+		route {
+			# SSE — direct proxy, no replace buffering
+			@sse path /event /global/event
+			handle @sse {
+				reverse_proxy localhost:4096
+			}
+
+			# Everything else — proxy with response rewriting
+			handle {
+				reverse_proxy localhost:4096 {
+					header_up Accept-Encoding identity
+				}
+				replace {
+					# Rewrite root-relative paths in HTML attributes
+					"src=\"/" "src=\"{$BASE_PATH}/"
+					"href=\"/" "href=\"{$BASE_PATH}/"
+					"content=\"/" "content=\"{$BASE_PATH}/"
+					# Rewrite root-relative asset paths in JS (fonts, workers)
+					"\"/assets/" "\"{$BASE_PATH}/assets/"
+					# Rewrite root-relative asset paths in CSS url() references
+					"(/assets/" "({$BASE_PATH}/assets/"
+					# Rewrite the API base URL so the JS client prepends the
+					# sub-path prefix.
+					"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
+				}
+			}
 		}
 	}
 
