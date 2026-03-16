@@ -10,6 +10,10 @@
 # fetches them from the correct sub-path prefix.  Vite dynamic imports
 # use document.baseURI which inherits from the page URL, so they resolve
 # correctly without a <base> tag.
+#
+# The JS API client uses location.origin as the base URL for REST calls.
+# We rewrite this to append the sub-path so API calls hit the Caddy proxy
+# instead of the Nova host root.
 
 {
 	order replace after encode
@@ -57,6 +61,11 @@
 			"\"/assets/" "\"{$BASE_PATH}/assets/"
 			# Rewrite root-relative asset paths in CSS url() references
 			"(/assets/" "({$BASE_PATH}/assets/"
+			# Rewrite the API base URL so the JS client prepends the sub-path
+			# prefix.  The origin detection function returns location.origin,
+			# which is just the scheme+host — we append the base path so API
+			# calls go to /cell/nova-opencode/session instead of /session.
+			"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
 		}
 	}
 
