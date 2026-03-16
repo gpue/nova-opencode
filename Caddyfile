@@ -90,8 +90,8 @@
 				replace {
 					# Route the main JS/CSS through a versioned asset alias so edge
 					# caches cannot serve older rewritten bundles after deploys.
-					"src=\"/assets/" "src=\"{$BASE_PATH}/assets-v-b360b34/"
-					"href=\"/assets/" "href=\"{$BASE_PATH}/assets-v-b360b34/"
+					"src=\"/assets/" "src=\"/assets-v-b360b34/"
+					"href=\"/assets/" "href=\"/assets-v-b360b34/"
 					# Rewrite root-relative paths in HTML attributes
 					"src=\"/" "src=\"{$BASE_PATH}/"
 					"href=\"/" "href=\"{$BASE_PATH}/"
