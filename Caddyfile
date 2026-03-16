@@ -7,7 +7,9 @@
 # OpenCode serves all assets and API endpoints from "/" (root-relative).
 # Since we serve behind a sub-path, we use the replace-response module to
 # rewrite root-relative paths in HTML/JS/CSS responses so the browser
-# fetches them from the correct sub-path prefix.
+# fetches them from the correct sub-path prefix.  Vite dynamic imports
+# use document.baseURI which inherits from the page URL, so they resolve
+# correctly without a <base> tag.
 
 {
 	order replace after encode
@@ -47,8 +49,6 @@
 			header_up Accept-Encoding identity
 		}
 		replace {
-			# Inject <base href> for Vite dynamic imports (uses document.baseURI)
-			"<head>" "<head><base href=\"{$BASE_PATH}/\">"
 			# Rewrite root-relative paths in HTML attributes
 			"src=\"/" "src=\"{$BASE_PATH}/"
 			"href=\"/" "href=\"{$BASE_PATH}/"
