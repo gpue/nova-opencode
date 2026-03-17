@@ -462,12 +462,12 @@ async def _startup() -> None:
     _ensure_db()
 
 
-@app.get("/internal/board")
+@app.get("/board")
 async def get_board() -> dict[str, Any]:
     return await _board_payload()
 
 
-@app.get("/internal/archive")
+@app.get("/archive")
 async def get_archive() -> dict[str, Any]:
     sessions = await _fetch_sessions()
     archived = []
@@ -485,7 +485,7 @@ async def get_archive() -> dict[str, Any]:
     return {"sessions": archived}
 
 
-@app.post("/internal/session")
+@app.post("/session")
 async def create_session_internal(payload: CreateSessionRequest) -> dict[str, Any]:
     lane = _normalize_lane(payload.lane)
     async with _client() as client:
@@ -501,7 +501,7 @@ async def create_session_internal(payload: CreateSessionRequest) -> dict[str, An
     return {"id": session_id}
 
 
-@app.patch("/internal/session/{session_id}/lane")
+@app.patch("/session/{session_id}/lane")
 async def move_session_internal(
     session_id: str, payload: MoveSessionRequest
 ) -> dict[str, Any]:
@@ -509,19 +509,19 @@ async def move_session_internal(
     return {"ok": True}
 
 
-@app.post("/internal/session/{session_id}/archive")
+@app.post("/session/{session_id}/archive")
 async def archive_session_internal(session_id: str) -> dict[str, Any]:
     _archive_session_state(session_id)
     return {"ok": True}
 
 
-@app.post("/internal/session/{session_id}/restore")
+@app.post("/session/{session_id}/restore")
 async def restore_session_internal(session_id: str) -> dict[str, Any]:
     _restore_session_state(session_id)
     return {"ok": True}
 
 
-@app.get("/internal/session/{session_id}")
+@app.get("/session/{session_id}")
 async def session_detail_internal(session_id: str) -> dict[str, Any]:
     return await _fetch_session_detail(session_id)
 
