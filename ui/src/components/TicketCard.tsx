@@ -15,17 +15,12 @@ export function TicketCard({ session, onArchive }: TicketCardProps) {
     <article
       ref={setNodeRef}
       className={`ticket-card${isDragging ? " dragging" : ""}`}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
     >
       <div className="ticket-card-top">
-        <button className="ticket-grip" type="button" aria-label="Drag conversation" {...attributes} {...listeners}>
-          <span />
-          <span />
-          <span />
-        </button>
+        <span className="ticket-move-label">Move</span>
         <div className="ticket-status-wrap">
           <span className={`ticket-status${session.running ? " running" : " idle"}`}>{session.running ? "Live" : "Idle"}</span>
         </div>
@@ -40,7 +35,7 @@ export function TicketCard({ session, onArchive }: TicketCardProps) {
       </div>
       <div className="ticket-actions">
         <Link to={`/session/${session.id}`} className="ticket-action-link">Open</Link>
-        <button className="ticket-action-button" type="button" onClick={() => onArchive(session.id)}>
+        <button className="ticket-action-button" type="button" onClick={(event) => { event.stopPropagation(); onArchive(session.id); }}>
           Archive
         </button>
       </div>

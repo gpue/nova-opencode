@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { DndContext, DragEndEvent, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
+import { DndContext, DragEndEvent, PointerSensor, closestCorners, useSensor, useSensors } from "@dnd-kit/core";
 import { useNavigate } from "react-router-dom";
 import { archiveSession, createSession, getBoard, moveSession } from "../lib/api";
-import type { BoardData, Lane, SessionSummary } from "../lib/types";
+import type { BoardData, Lane } from "../lib/types";
 import { LaneColumn } from "./LaneColumn";
+import { TerminalPanel } from "./TerminalPanel";
+import { WorkspacePanel } from "./WorkspacePanel";
 
 const laneOrder: Array<{ key: Lane; label: string }> = [
   { key: "later", label: "Later" },
@@ -20,7 +21,7 @@ function cloneLanes(lanes: BoardData["lanes"]) {
   } satisfies BoardData["lanes"];
 }
 
-function findLane(lanes: BoardData["lanes"], sessionId: string): Lane | null {
+function findLaneBySession(lanes: BoardData["lanes"], sessionId: string): Lane | null {
   for (const lane of laneOrder) {
     if (lanes[lane.key].some((session) => session.id === sessionId)) return lane.key;
   }
@@ -31,6 +32,8 @@ export function BoardPage() {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const navigate = useNavigate();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -54,8 +57,6 @@ export function BoardPage() {
     };
   }, []);
 
-  const archiveCount = board?.archiveCount ?? 0;
-
   async function handleCreate(lane: Lane) {
     const created = await createSession(lane);
     navigate(`/session/${created.id}`);
@@ -74,41 +75,39 @@ export function BoardPage() {
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    if (!board) return;
+    if (!board || !event.over) return;
     const activeId = String(event.active.id);
-    const overId = event.over ? String(event.over.id) : null;
-    if (!overId) return;
-
+    const overId = String(event.over.id);
     const lanes = cloneLanes(board.lanes);
-    const fromLane = findLane(lanes, activeId);
+    const fromLane = findLaneBySession(lanes, activeId);
     if (!fromLane) return;
 
-    const toLane = findLane(lanes, overId) ?? (laneOrder.find((lane) => lane.key === overId)?.key ?? null);
-    if (!toLane) return;
-
-    const fromItems = lanes[fromLane];
-    const sourceIndex = fromItems.findIndex((item) => item.id === activeId);
+    const sourceIndex = lanes[fromLane].findIndex((item) => item.id === activeId);
     if (sourceIndex === -1) return;
 
-    const [moved] = fromItems.splice(sourceIndex, 1);
+    const [moved] = lanes[fromLane].splice(sourceIndex, 1);
+    const isLaneTarget = laneOrder.some((lane) => lane.key === overId);
+    const toLane = isLaneTarget ? (overId as Lane) : findLaneBySession(lanes, overId);
+    if (!toLane) return;
+
     moved.lane = toLane;
 
-    if (fromLane === toLane) {
-      const targetIndex = lanes[toLane].findIndex((item) => item.id === overId);
-      const nextItems = arrayMove(lanes[toLane], sourceIndex, targetIndex);
-      lanes[toLane] = nextItems;
+    if (isLaneTarget) {
+      lanes[toLane].push(moved);
       setBoard({ ...board, lanes });
-      await moveSession(activeId, toLane, overId);
+      await moveSession(activeId, toLane, null);
       return;
     }
 
     const targetIndex = lanes[toLane].findIndex((item) => item.id === overId);
     if (targetIndex === -1) {
       lanes[toLane].push(moved);
-    } else {
-      lanes[toLane].splice(targetIndex, 0, moved);
+      setBoard({ ...board, lanes });
+      await moveSession(activeId, toLane, null);
+      return;
     }
 
+    lanes[toLane].splice(targetIndex, 0, moved);
     setBoard({ ...board, lanes });
     await moveSession(activeId, toLane, overId);
   }
@@ -119,29 +118,36 @@ export function BoardPage() {
     if (!board) return <div className="page-state">No board data.</div>;
 
     return (
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
         <div className="board-page-head">
           <div>
             <h1>Conversation board</h1>
             <p>Organize OpenCode work into Later, Next, and Now.</p>
           </div>
-          <button className="archive-pill" type="button" onClick={() => navigate("/archive")}>Archive {archiveCount > 0 ? `(${archiveCount})` : ""}</button>
+          <div className="board-toolbar">
+            <button className="archive-pill" type="button" onClick={() => setWorkspaceOpen(true)}>Workspace</button>
+            <button className="archive-pill" type="button" onClick={() => setTerminalOpen((current) => !current)}>Terminal</button>
+          </div>
         </div>
-        <div className="board-grid">
-          {laneOrder.map((lane) => (
-            <LaneColumn
-              key={lane.key}
-              lane={lane.key}
-              title={lane.label}
-              sessions={board.lanes[lane.key]}
-              onCreate={handleCreate}
-              onArchive={handleArchive}
-            />
-          ))}
+        <div className="board-grid-wrap">
+          <div className="board-grid">
+            {laneOrder.map((lane) => (
+              <LaneColumn
+                key={lane.key}
+                lane={lane.key}
+                title={lane.label}
+                sessions={board.lanes[lane.key]}
+                onCreate={handleCreate}
+                onArchive={handleArchive}
+              />
+            ))}
+          </div>
+          <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />
         </div>
+        <TerminalPanel open={terminalOpen} onClose={() => setTerminalOpen(false)} />
       </DndContext>
     );
-  }, [archiveCount, board, error, loading, navigate, sensors]);
+  }, [board, error, loading, sensors, workspaceOpen, terminalOpen, navigate]);
 
   return <section className="board-page">{content}</section>;
 }

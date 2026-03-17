@@ -42,7 +42,7 @@ export function SessionPage() {
     <section className="session-page">
       <header className="session-header">
         <div>
-          <Link to="/" className="archive-back-link">Back to board</Link>
+          <Link to="/" className="archive-back-link session-back-link">Back to board</Link>
           <h1>{detail?.title || "Conversation"}</h1>
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>

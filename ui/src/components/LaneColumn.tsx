@@ -1,3 +1,4 @@
+import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Lane, SessionSummary } from "../lib/types";
 import { TicketCard } from "./TicketCard";
@@ -11,8 +12,10 @@ interface LaneColumnProps {
 }
 
 export function LaneColumn({ lane, title, sessions, onCreate, onArchive }: LaneColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: lane });
+
   return (
-    <section className="board-lane" data-lane={lane}>
+    <section className={`board-lane${isOver ? " is-over" : ""}`} data-lane={lane}>
       <header className="board-lane-header">
         <div>
           <h2>{title}</h2>
@@ -23,7 +26,7 @@ export function LaneColumn({ lane, title, sessions, onCreate, onArchive }: LaneC
         </button>
       </header>
       <SortableContext items={sessions.map((session) => session.id)} strategy={verticalListSortingStrategy}>
-        <div className="board-lane-list">
+        <div ref={setNodeRef} className="board-lane-list">
           {sessions.map((session) => (
             <TicketCard key={session.id} session={session} onArchive={onArchive} />
           ))}

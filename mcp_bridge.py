@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -37,6 +38,15 @@ class CreateSessionRequest(BaseModel):
 class MoveSessionRequest(BaseModel):
     lane: str
     afterId: str | None = None
+
+
+class WorkspaceFileUpdateRequest(BaseModel):
+    path: str
+    content: str
+
+
+class TerminalCommandRequest(BaseModel):
+    command: str
 
 
 class SessionBoardRecord(BaseModel):
@@ -106,6 +116,36 @@ def _normalize_lane(value: str) -> str:
     if lane not in LANES:
         raise HTTPException(status_code=400, detail=f"Invalid lane: {value}")
     return lane
+
+
+def _workspace_path(path: str) -> Path:
+    candidate = (WORKSPACE_DIR / path).resolve()
+    workspace_root = WORKSPACE_DIR.resolve()
+    if candidate != workspace_root and workspace_root not in candidate.parents:
+        raise HTTPException(status_code=400, detail="Path escapes workspace")
+    return candidate
+
+
+def _workspace_tree(root: Path) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    for child in sorted(
+        root.iterdir(), key=lambda item: (item.is_file(), item.name.lower())
+    ):
+        if child.name in {".git", "node_modules", ".nova-opencode"}:
+            continue
+        relative_path = child.relative_to(WORKSPACE_DIR).as_posix()
+        if child.is_dir():
+            nodes.append(
+                {
+                    "name": child.name,
+                    "path": relative_path,
+                    "type": "directory",
+                    "children": _workspace_tree(child),
+                }
+            )
+        else:
+            nodes.append({"name": child.name, "path": relative_path, "type": "file"})
+    return nodes
 
 
 def _get_record(session_id: str) -> SessionBoardRecord | None:
@@ -524,6 +564,49 @@ async def restore_session_internal(session_id: str) -> dict[str, Any]:
 @app.get("/session/{session_id}")
 async def session_detail_internal(session_id: str) -> dict[str, Any]:
     return await _fetch_session_detail(session_id)
+
+
+@app.get("/workspace/tree")
+async def workspace_tree_internal() -> dict[str, Any]:
+    return {"tree": _workspace_tree(WORKSPACE_DIR)}
+
+
+@app.get("/workspace/file")
+async def workspace_file_internal(path: str = Query(...)) -> dict[str, Any]:
+    file_path = _workspace_path(path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"path": path, "content": file_path.read_text()}
+
+
+@app.put("/workspace/file")
+async def workspace_file_update_internal(
+    payload: WorkspaceFileUpdateRequest,
+) -> dict[str, Any]:
+    file_path = _workspace_path(payload.path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+    file_path.write_text(payload.content)
+    return {"ok": True}
+
+
+@app.post("/terminal/run")
+async def terminal_run_internal(payload: TerminalCommandRequest) -> dict[str, Any]:
+    completed = subprocess.run(
+        ["bash", "-lc", payload.command],
+        cwd=WORKSPACE_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return {
+        "command": payload.command,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "exitCode": completed.returncode,
+    }
 
 
 app.mount("/mcp-root", mcp.streamable_http_app())

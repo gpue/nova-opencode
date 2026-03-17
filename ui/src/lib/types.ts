@@ -37,3 +37,22 @@ export interface SessionDetail {
   updatedAt: string | null;
   messages: SessionMessage[];
 }
+
+export interface WorkspaceNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: WorkspaceNode[];
+}
+
+export interface WorkspaceFile {
+  path: string;
+  content: string;
+}
+
+export interface TerminalResult {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}

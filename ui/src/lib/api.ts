@@ -1,4 +1,11 @@
-import type { BoardData, Lane, SessionDetail } from "./types";
+import type {
+  BoardData,
+  Lane,
+  SessionDetail,
+  TerminalResult,
+  WorkspaceFile,
+  WorkspaceNode,
+} from "./types";
 
 const base = "/cell/nova-opencode";
 
@@ -52,7 +59,7 @@ export function restoreSession(sessionId: string): Promise<{ ok: boolean }> {
   });
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+export function getSessionDetail(sessionId: string): Promise<SessionDetail> {
   return request(`/internal/session/${sessionId}`);
 }
 
@@ -60,5 +67,28 @@ export function sendMessage(sessionId: string, prompt: string): Promise<unknown>
   return request(`/api/session/${sessionId}/message`, {
     method: "POST",
     body: JSON.stringify({ content: prompt }),
+  });
+}
+
+export function getWorkspaceTree(): Promise<{ tree: WorkspaceNode[] }> {
+  return request("/internal/workspace/tree");
+}
+
+export function getWorkspaceFile(path: string): Promise<WorkspaceFile> {
+  const encoded = encodeURIComponent(path);
+  return request(`/internal/workspace/file?path=${encoded}`);
+}
+
+export function saveWorkspaceFile(path: string, content: string): Promise<{ ok: boolean }> {
+  return request("/internal/workspace/file", {
+    method: "PUT",
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+export function runTerminalCommand(command: string): Promise<TerminalResult> {
+  return request("/internal/terminal/run", {
+    method: "POST",
+    body: JSON.stringify({ command }),
   });
 }
