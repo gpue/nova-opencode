@@ -649,6 +649,7 @@ async def terminal_run_internal(payload: TerminalCommandRequest) -> dict[str, An
     completed = subprocess.run(
         ["bash", "-lc", payload.command],
         cwd=WORKSPACE_DIR,
+        env={**os.environ, "TERM": os.environ.get("TERM", "xterm-256color")},
         capture_output=True,
         text=True,
         timeout=120,
