@@ -25,11 +25,13 @@
 	}
 
 	handle {$BASE_PATH} {
+		header Cache-Control "no-store"
 		redir {$BASE_PATH}/ temporary
 	}
 
 	handle_path {$BASE_PATH}/* {
 		root * /app/ui
+		header Cache-Control "no-store"
 		try_files {path} /index.html
 		file_server
 	}
