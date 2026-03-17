@@ -24,7 +24,8 @@
 		reverse_proxy localhost:4096
 	}
 
-	handle {$BASE_PATH} {
+	@baseExact path {$BASE_PATH}
+	handle @baseExact {
 		header Cache-Control "no-store"
 		redir {$BASE_PATH}/ temporary
 	}
