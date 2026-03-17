@@ -75,6 +75,21 @@ export interface ComposerOptions {
   defaultModel: { providerID: string; modelID: string } | null;
 }
 
+export interface ProviderAuthMethod {
+  type: "oauth" | "api";
+  label: string;
+}
+
+export interface ProviderConnectionSummary {
+  connected: string[];
+}
+
+export interface ProviderOAuthAuthorization {
+  url: string;
+  method: string;
+  instructions: string;
+}
+
 export interface PromptOptions {
   providerID: string;
   modelID: string;

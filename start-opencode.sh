@@ -7,12 +7,54 @@ set -euo pipefail
 export BASE_PATH="${BASE_PATH:-/cell/nova-opencode}"
 export OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 export MCP_BRIDGE_PORT="${MCP_BRIDGE_PORT:-8081}"
+export WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
+export OPENCODE_XDG_ROOT="${WORKSPACE_DIR}/.opencode"
+export PERSISTENT_HOME="${WORKSPACE_DIR}/.home/opencode"
+export XDG_CONFIG_HOME="${OPENCODE_XDG_ROOT}/config"
+export XDG_DATA_HOME="${OPENCODE_XDG_ROOT}/data"
+export XDG_CACHE_HOME="${OPENCODE_XDG_ROOT}/cache"
+
+mkdir -p "${PERSISTENT_HOME}" "${PERSISTENT_HOME}/.config" "${PERSISTENT_HOME}/.cache" "${PERSISTENT_HOME}/.local/share"
+
+mkdir -p "${OPENCODE_XDG_ROOT}/config/opencode" "${OPENCODE_XDG_ROOT}/data" "${OPENCODE_XDG_ROOT}/cache"
+
+if [ -f /home/opencode/.config/opencode/opencode.json ] && [ ! -f "${OPENCODE_XDG_ROOT}/config/opencode/opencode.json" ]; then
+    cp /home/opencode/.config/opencode/opencode.json "${OPENCODE_XDG_ROOT}/config/opencode/opencode.json"
+fi
+
+if [ -f /home/opencode/.gitconfig ] && [ ! -f "${PERSISTENT_HOME}/.gitconfig" ]; then
+    cp /home/opencode/.gitconfig "${PERSISTENT_HOME}/.gitconfig"
+fi
+
+if [ -f /home/opencode/.git-credentials ] && [ ! -f "${PERSISTENT_HOME}/.git-credentials" ]; then
+    cp /home/opencode/.git-credentials "${PERSISTENT_HOME}/.git-credentials"
+fi
+
+if [ -d /home/opencode/.config/gh ] && [ ! -d "${PERSISTENT_HOME}/.config/gh" ]; then
+    mkdir -p "${PERSISTENT_HOME}/.config"
+    cp -R /home/opencode/.config/gh "${PERSISTENT_HOME}/.config/gh"
+fi
+
+ln -sfn "${PERSISTENT_HOME}/.config" /home/opencode/.config
+ln -sfn "${PERSISTENT_HOME}/.cache" /home/opencode/.cache
+ln -sfn "${PERSISTENT_HOME}/.local" /home/opencode/.local
+
+if [ -f "${PERSISTENT_HOME}/.gitconfig" ]; then
+    ln -sfn "${PERSISTENT_HOME}/.gitconfig" /home/opencode/.gitconfig
+fi
+
+if [ -f "${PERSISTENT_HOME}/.git-credentials" ]; then
+    ln -sfn "${PERSISTENT_HOME}/.git-credentials" /home/opencode/.git-credentials
+fi
+
+export HOME="${PERSISTENT_HOME}"
 
 echo "=== nova-opencode ==="
 echo "  Caddy proxy     : port 8080 (path: ${BASE_PATH})"
 echo "  OpenCode web UI : port ${OPENCODE_PORT} (internal)"
 echo "  MCP bridge      : port ${MCP_BRIDGE_PORT} (internal)"
 echo "  Workspace       : /workspace"
+echo "  Home            : ${HOME}"
 echo "====================="
 
 # Trap to clean up background processes
@@ -28,9 +70,8 @@ python3 /app/mcp_bridge.py &
 MCP_PID=$!
 
 # Start OpenCode web UI in the background.
-# OpenCode uses XDG conventions — default XDG_DATA_HOME is ~/.local/share
-# which is writable for the opencode user.  We don't override it here.
-opencode web \
+env \
+    opencode web \
     --port "${OPENCODE_PORT}" \
     --hostname 127.0.0.1 \
     --cors "*" &

@@ -1,18 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import Editor from "@monaco-editor/react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { getWorkspaceFile, getWorkspaceTree, saveWorkspaceFile } from "../lib/api";
 import type { WorkspaceNode } from "../lib/types";
+import { Icon } from "./Icon";
 
 interface WorkspacePanelProps {
   open: boolean;
   onClose: () => void;
+  mode?: "inline" | "overlay";
 }
 
-function TreeNode({ node, selectedPath, onSelect }: { node: WorkspaceNode; selectedPath: string | null; onSelect: (path: string) => void }) {
-  const [expanded, setExpanded] = useState(node.type === "directory");
+function TreeNode({
+  node,
+  selectedPath,
+  onSelect,
+  depth = 0,
+}: {
+  node: WorkspaceNode;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
+  depth?: number;
+}) {
+  const [expanded, setExpanded] = useState(node.type === "directory" && depth === 0);
 
   if (node.type === "file") {
     return (
       <button className={`workspace-node workspace-file${selectedPath === node.path ? " selected" : ""}`} type="button" onClick={() => onSelect(node.path)}>
+        <Icon name="open" className="workspace-node-icon" width="14" height="14" />
         <span className="workspace-node-label">{node.name}</span>
       </button>
     );
@@ -22,12 +36,13 @@ function TreeNode({ node, selectedPath, onSelect }: { node: WorkspaceNode; selec
     <div className="workspace-branch">
       <button className="workspace-node workspace-folder" type="button" onClick={() => setExpanded((current) => !current)}>
         <span>{expanded ? "▾" : "▸"}</span>
+        <Icon name="folder" className="workspace-node-icon" width="14" height="14" />
         <span className="workspace-node-label">{node.name}</span>
       </button>
       {expanded ? (
         <div className="workspace-children">
           {(node.children || []).map((child) => (
-            <TreeNode key={child.path} node={child} selectedPath={selectedPath} onSelect={onSelect} />
+            <TreeNode key={child.path} node={child} selectedPath={selectedPath} onSelect={onSelect} depth={depth + 1} />
           ))}
         </div>
       ) : null}
@@ -35,13 +50,76 @@ function TreeNode({ node, selectedPath, onSelect }: { node: WorkspaceNode; selec
   );
 }
 
-export function WorkspacePanel({ open, onClose }: WorkspacePanelProps) {
+const languageOptions = [
+  { value: "auto", label: "Auto" },
+  { value: "plaintext", label: "Plain text" },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "json", label: "JSON" },
+  { value: "python", label: "Python" },
+  { value: "bash", label: "Shell" },
+  { value: "yaml", label: "YAML" },
+  { value: "markdown", label: "Markdown" },
+  { value: "html", label: "HTML" },
+  { value: "css", label: "CSS" },
+  { value: "sql", label: "SQL" },
+];
+
+function detectLanguage(path: string | null): string {
+  if (!path) return "plaintext";
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+  if (lower.endsWith(".js") || lower.endsWith(".jsx") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "javascript";
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".py")) return "python";
+  if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".zsh")) return "bash";
+  if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yaml";
+  if (lower.endsWith(".md")) return "markdown";
+  if (lower.endsWith(".html")) return "html";
+  if (lower.endsWith(".css")) return "css";
+  if (lower.endsWith(".sql")) return "sql";
+  return "plaintext";
+}
+
+export function WorkspacePanel({ open, onClose, mode = "inline" }: WorkspacePanelProps) {
   const [tree, setTree] = useState<WorkspaceNode[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
+  const [language, setLanguage] = useState("auto");
+  const [panelWidth, setPanelWidth] = useState(820);
+  const [treeWidth, setTreeWidth] = useState(250);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const treeResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const handleMove = (event: PointerEvent) => {
+      if (panelResizeRef.current) {
+        const next = panelResizeRef.current.startWidth + (panelResizeRef.current.startX - event.clientX);
+        setPanelWidth(Math.max(620, Math.min(window.innerWidth - 32, next)));
+      }
+      if (treeResizeRef.current) {
+        const next = treeResizeRef.current.startWidth + (event.clientX - treeResizeRef.current.startX);
+        setTreeWidth(Math.max(180, Math.min(420, next)));
+      }
+    };
+
+    const handleUp = () => {
+      panelResizeRef.current = null;
+      treeResizeRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -56,6 +134,7 @@ export function WorkspacePanel({ open, onClose }: WorkspacePanelProps) {
     getWorkspaceFile(selectedPath)
       .then((file) => {
         setContent(file.content);
+        setLanguage("auto");
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load file"))
@@ -85,43 +164,112 @@ export function WorkspacePanel({ open, onClose }: WorkspacePanelProps) {
     setSaving(true);
     try {
       await saveWorkspaceFile(selectedPath, content);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save file");
     } finally {
       setSaving(false);
     }
   }
 
-  return (
-    <aside className={`workspace-panel${open ? " open" : ""}`}>
+  const resolvedLanguage = language === "auto" ? detectLanguage(selectedPath) : language;
+
+  function startPanelResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    panelResizeRef.current = { startX: event.clientX, startWidth: panelWidth };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function startTreeResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    treeResizeRef.current = { startX: event.clientX, startWidth: treeWidth };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  const panel = (
+    <aside className={`workspace-panel ${mode}${open ? " open" : ""}`} style={mode === "overlay" ? { width: panelWidth } : undefined}>
+      {mode === "overlay" ? <button className="workspace-resize-handle workspace-panel-resize" type="button" aria-label="Resize workspace panel" onPointerDown={startPanelResize} /> : null}
+      {mode === "overlay" ? (
+        <button className="workspace-overlay-close" type="button" onClick={onClose} aria-label="Close workspace" title="Close workspace">
+          <Icon name="close" width="14" height="14" />
+          <span>Close</span>
+        </button>
+      ) : null}
       <div className="workspace-panel-head">
         <div>
           <h2>Workspace</h2>
           <p>Browse and edit files on the PVC.</p>
         </div>
-        <button className="panel-close-button" type="button" onClick={onClose}>Close</button>
+        <button className="panel-close-button" type="button" onClick={onClose} title="Close workspace">
+          <Icon name="close" width="14" height="14" />
+          <span>Close</span>
+        </button>
       </div>
       {error ? <div className="page-state error">{error}</div> : null}
-      <div className="workspace-panel-body">
+      <div className="workspace-panel-body" style={{ gridTemplateColumns: `${treeWidth}px 10px minmax(0, 1fr)` }}>
         <div className="workspace-tree">
           {tree.map((node) => (
             <TreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={setSelectedPath} />
           ))}
         </div>
+        <button className="workspace-resize-handle workspace-splitter" type="button" aria-label="Resize explorer" onPointerDown={startTreeResize} />
         <div className="workspace-editor-wrap">
           <div className="workspace-editor-head">
-            <span>{selectedPath || "No file selected"}</span>
-            <button className="lane-new-button" type="button" onClick={handleSave} disabled={!selectedPath || saving}>
-              {saving ? "Saving..." : "Save"}
-            </button>
+            <span className="workspace-file-path">{selectedPath || "No file selected"}</span>
+            <div className="workspace-editor-actions">
+              <label className="workspace-language-select">
+                <span>Language</span>
+                <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={!selectedPath}>
+                  {languageOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="lane-new-button" type="button" onClick={handleSave} disabled={!selectedPath || saving} title="Save current file">
+                <Icon name="save" width="14" height="14" />
+                <span>{saving ? "Saving..." : "Save"}</span>
+              </button>
+            </div>
           </div>
-          <textarea
-            className="workspace-editor"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            disabled={!selectedPath || loading}
-            placeholder={loading ? "Loading file..." : "Select a file to edit."}
-          />
+          <div className="workspace-editor-shell">
+            <Editor
+              className="workspace-monaco"
+              height="100%"
+              language={resolvedLanguage}
+              loading={loading ? "Loading file..." : "Preparing editor..."}
+              options={{
+                automaticLayout: true,
+                fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                fontSize: 13,
+                lineHeight: 22,
+                minimap: { enabled: false },
+                padding: { top: 16, bottom: 16 },
+                readOnly: !selectedPath || loading,
+                roundedSelection: true,
+                scrollBeyondLastLine: false,
+                wordWrap: "on",
+              }}
+              theme="vs-dark"
+              value={content}
+              onChange={(value) => setContent(value ?? "")}
+            />
+            {!selectedPath && !loading ? <div className="workspace-empty-state">Select a file to edit.</div> : null}
+          </div>
         </div>
       </div>
     </aside>
   );
+
+  if (mode === "overlay") {
+    return (
+      <div className={`workspace-overlay${open ? " open" : ""}`}>
+        <div className="workspace-overlay-backdrop" onClick={onClose} />
+        {panel}
+      </div>
+    );
+  }
+
+  return panel;
 }

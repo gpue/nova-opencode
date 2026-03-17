@@ -1,6 +1,7 @@
 import { Link, NavLink } from "react-router-dom";
+import { Icon } from "./Icon";
 
-export function Header() {
+export function Header({ onOpenConnections }: { onOpenConnections: () => void }) {
   return (
     <header className="nova-header">
       <div className="nova-header-left">
@@ -17,14 +18,20 @@ export function Header() {
           <div className="nova-app-subtitle">Conversation board</div>
         </div>
       </div>
-      <nav className="nova-nav">
-        <NavLink to="/" className={({ isActive }) => `nova-nav-link${isActive ? " active" : ""}`} end>
-          Board
-        </NavLink>
-        <NavLink to="/archive" className={({ isActive }) => `nova-nav-link${isActive ? " active" : ""}`}>
-          Archive
-        </NavLink>
-      </nav>
+      <div className="nova-header-right">
+        <nav className="nova-nav">
+          <NavLink to="/" className={({ isActive }) => `nova-nav-link${isActive ? " active" : ""}`} end>
+            Board
+          </NavLink>
+          <NavLink to="/archive" className={({ isActive }) => `nova-nav-link${isActive ? " active" : ""}`}>
+            Archive
+          </NavLink>
+        </nav>
+        <button className="archive-pill primary-action" type="button" onClick={onOpenConnections} title="Connect GitHub Copilot or OpenAI Codex">
+          <Icon name="link" width="14" height="14" />
+          <span>Connect AI</span>
+        </button>
+      </div>
     </header>
   );
 }

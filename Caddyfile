@@ -24,6 +24,11 @@
 		reverse_proxy localhost:4096
 	}
 
+	handle_path {$BASE_PATH}/assets/* {
+		root * /app/ui/assets
+		file_server
+	}
+
 	@baseExact path {$BASE_PATH}
 	redir @baseExact {$BASE_PATH}/ 302
 

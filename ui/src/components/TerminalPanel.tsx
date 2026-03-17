@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import { runTerminalCommand } from "../lib/api";
 import type { TerminalResult } from "../lib/types";
+import { Icon } from "./Icon";
 
 interface TerminalPanelProps {
   open: boolean;
@@ -12,11 +13,13 @@ interface TerminalPanelProps {
 
 export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
   const [error, setError] = useState<string | null>(null);
+  const [height, setHeight] = useState(420);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const commandRef = useRef("");
   const runningRef = useRef(false);
+  const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   function prompt() {
     const terminal = terminalRef.current;
@@ -128,16 +131,51 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    window.requestAnimationFrame(() => fitRef.current?.fit());
+  }, [height, open]);
+
+  useEffect(() => {
+    const handleMove = (event: PointerEvent) => {
+      if (!resizeRef.current) return;
+      const next = resizeRef.current.startHeight + (resizeRef.current.startY - event.clientY);
+      setHeight(Math.max(260, Math.min(window.innerHeight - 120, next)));
+    };
+    const handleUp = () => {
+      resizeRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, []);
+
+  function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    resizeRef.current = { startY: event.clientY, startHeight: height };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }
+
   return (
     <section className={`terminal-overlay${open ? " open" : ""}`}>
       <div className="terminal-overlay-backdrop" onClick={onClose} />
-      <div className="terminal-panel terminal-panel-sheet">
+      <div className="terminal-panel terminal-panel-sheet" style={{ height }}>
+        <button className="terminal-resize-handle" type="button" aria-label="Resize terminal" onPointerDown={startResize} />
         <div className="terminal-head">
           <div>
             <h2>Workspace terminal</h2>
             <p>Execute bash commands in /workspace.</p>
           </div>
-          <button className="panel-close-button" type="button" onClick={onClose}>Close</button>
+          <button className="panel-close-button" type="button" onClick={onClose} title="Close terminal">
+            <Icon name="close" width="14" height="14" />
+            <span>Close</span>
+          </button>
         </div>
         <div className="terminal-screen" ref={hostRef} />
         {error ? <div className="page-state error terminal-error">{error}</div> : null}

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { CSS } from "@dnd-kit/utilities";
 import { useSortable } from "@dnd-kit/sortable";
 import type { SessionSummary } from "../lib/types";
+import { Icon } from "./Icon";
 
 interface TicketCardProps {
   session: SessionSummary;
@@ -40,10 +41,14 @@ export function TicketCard({ session, onArchive, dragOverlay = false }: TicketCa
         <span>{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : "Just now"}</span>
       </div>
       <div className="ticket-actions">
-        <Link to={`/session/${session.id}`} className="ticket-action-link">Open</Link>
+        <Link to={`/session/${session.id}`} className="ticket-action-link" title="Open conversation">
+          <Icon name="open" width="14" height="14" />
+          <span>Open</span>
+        </Link>
         {onArchive ? (
-          <button className="ticket-action-button" type="button" onClick={(event) => { event.stopPropagation(); onArchive(session.id); }}>
-            Archive
+          <button className="ticket-action-button" type="button" title="Archive conversation" onClick={(event) => { event.stopPropagation(); onArchive(session.id); }}>
+            <Icon name="archive" width="14" height="14" />
+            <span>Archive</span>
           </button>
         ) : null}
       </div>

@@ -39,7 +39,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ── System packages + Python 3 + git ───────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg git python3 python3-pip python3-venv \
+        ca-certificates curl gh gnupg git python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Install OpenCode binary from GitHub Releases ───────────────────

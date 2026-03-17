@@ -6,6 +6,7 @@ import type { BoardData, Lane, SessionSummary } from "../lib/types";
 import { LaneColumn } from "./LaneColumn";
 import { TerminalPanel } from "./TerminalPanel";
 import { TicketCard } from "./TicketCard";
+import { Icon } from "./Icon";
 import { WorkspacePanel } from "./WorkspacePanel";
 
 const laneOrder: Array<{ key: Lane; label: string }> = [
@@ -151,8 +152,18 @@ export function BoardPage() {
             <p>Organize OpenCode work into Later, Next, and Now.</p>
           </div>
           <div className="board-toolbar">
-            <button className="archive-pill" type="button" onClick={() => setWorkspaceOpen(true)}>Workspace</button>
-            <button className={`archive-pill${terminalOpen ? " active" : ""}`} type="button" onClick={() => setTerminalOpen((current) => !current)}>Terminal</button>
+            <button className="archive-pill" type="button" onClick={() => setWorkspaceOpen(true)} title="Open workspace panel">
+              <Icon name="folder" width="14" height="14" />
+              <span>Workspace</span>
+            </button>
+            <button className={`archive-pill${terminalOpen ? " active" : ""}`} type="button" onClick={() => setTerminalOpen((current) => !current)} title="Toggle terminal overlay">
+              <Icon name="terminal" width="14" height="14" />
+              <span>Terminal</span>
+            </button>
+            <button className="archive-pill primary-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent("nova:open-connections"))} title="Connect GitHub Copilot or OpenAI Codex">
+              <Icon name="link" width="14" height="14" />
+              <span>Connect AI</span>
+            </button>
           </div>
         </div>
         <div className="board-grid-wrap">
@@ -161,8 +172,8 @@ export function BoardPage() {
               <LaneColumn key={lane.key} lane={lane.key} title={lane.label} sessions={board.lanes[lane.key]} onCreate={handleCreate} onArchive={handleArchive} />
             ))}
           </div>
-          <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />
         </div>
+        <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} mode="overlay" />
         <TerminalPanel open={terminalOpen} onClose={() => setTerminalOpen(false)} />
         <DragOverlay>{activeSession ? <TicketCard session={activeSession} dragOverlay /> : null}</DragOverlay>
       </DndContext>

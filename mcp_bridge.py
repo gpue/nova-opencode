@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sqlite3
 import subprocess
@@ -31,6 +32,40 @@ OPENCODE_USERNAME = os.environ.get("OPENCODE_SERVER_USERNAME", "")
 OPENCODE_PASSWORD = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
 LANES = ("later", "next", "now")
 ACTIVE_RUNS: set[str] = set()
+
+
+def _auth_file_paths() -> list[Path]:
+    home = Path.home()
+    candidates: list[Path] = []
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        candidates.append(Path(xdg_data_home) / "opencode" / "auth.json")
+    candidates.append(WORKSPACE_DIR / ".opencode" / "data" / "opencode" / "auth.json")
+    candidates.append(home / ".local" / "share" / "opencode" / "auth.json")
+
+    unique_candidates: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve(strict=False)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def _connected_auth_providers() -> list[str]:
+    connected: set[str] = set()
+    for path in _auth_file_paths():
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text())
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            connected.update(key for key in payload.keys() if isinstance(key, str))
+    return sorted(connected)
 
 
 class CreateSessionRequest(BaseModel):
@@ -597,6 +632,11 @@ async def get_composer_options() -> dict[str, Any]:
                 break
 
     return {"models": models, "defaultModel": default_model}
+
+
+@app.get("/auth/providers")
+async def get_auth_providers() -> dict[str, Any]:
+    return {"connected": _connected_auth_providers()}
 
 
 @app.get("/archive")

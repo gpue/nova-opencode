@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getComposerOptions, getSessionDetail, sendMessage } from "../lib/api";
 import type { AgentMode, ComposerOptions, PromptOptions, SessionDetail } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
+import { Icon } from "./Icon";
+import { WorkspacePanel } from "./WorkspacePanel";
 
 export function SessionPage() {
   const { sessionId = "" } = useParams();
@@ -16,6 +18,14 @@ export function SessionPage() {
   const [modelID, setModelID] = useState("");
   const [variant, setVariant] = useState("medium");
   const [mode, setMode] = useState<AgentMode>("plan");
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const timelineRef = useRef<HTMLDivElement | null>(null);
+
+  function scrollTimelineToBottom() {
+    const timeline = timelineRef.current;
+    if (!timeline) return;
+    timeline.scrollTo({ top: timeline.scrollHeight, behavior: "smooth" });
+  }
 
   useEffect(() => {
     getComposerOptions()
@@ -79,6 +89,10 @@ export function SessionPage() {
     return parts.some((part) => part.type === "tool" && (part as { state?: { status?: string } }).state?.status === "running");
   }, [latestAssistant]);
 
+  useEffect(() => {
+    window.requestAnimationFrame(() => scrollTimelineToBottom());
+  }, [detail?.messages.length, detail?.running]);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!sessionId || !prompt.trim() || !providerID || !modelID) return;
@@ -87,11 +101,18 @@ export function SessionPage() {
       const payload: PromptOptions = { providerID, modelID, variant, mode };
       await sendMessage(sessionId, prompt.trim(), payload);
       setPrompt("");
+      scrollTimelineToBottom();
       const refreshed = await getSessionDetail(sessionId);
       setDetail(refreshed);
     } finally {
       setSending(false);
     }
+  }
+
+  function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    void handleSubmit(event);
   }
 
   return (
@@ -102,61 +123,77 @@ export function SessionPage() {
           <h1>{detail?.title || "Conversation"}</h1>
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>
-        <div className={`session-progress${detail?.running ? " running" : ""}`}>
-          {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
+        <div className="session-header-actions">
+          <button className="archive-pill primary-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent("nova:open-connections"))} title="Connect GitHub Copilot or OpenAI Codex">
+            <Icon name="link" width="14" height="14" />
+            <span>Connect AI</span>
+          </button>
+          <button className={`archive-pill${workspaceOpen ? " active" : ""}`} type="button" onClick={() => setWorkspaceOpen((current) => !current)} title="Open workspace panel">
+            <Icon name="folder" width="14" height="14" />
+            <span>Workspace</span>
+          </button>
+          <div className={`session-progress${detail?.running ? " running" : ""}`}>
+            {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
+          </div>
         </div>
       </header>
       {loading ? <div className="page-state">Loading conversation...</div> : null}
       {error ? <div className="page-state error">{error}</div> : null}
       {!loading && !error && detail ? (
-        <>
-          <div className="session-timeline">
-            {detail.messages.map((message) => (
-              <ConversationMessage key={message.id} message={message} />
-            ))}
-            {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
+        <div className="session-shell">
+          <div className="session-main">
+            <div className="session-timeline" ref={timelineRef}>
+              {detail.messages.map((message) => (
+                <ConversationMessage key={message.id} message={message} />
+              ))}
+              {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
+            </div>
+            <form className="session-composer" onSubmit={handleSubmit}>
+              <div className="session-controls">
+                <label>
+                  <span>Model</span>
+                  <select value={modelID} onChange={(event) => setModelID(event.target.value)}>
+                    {(options?.models || []).map((item) => (
+                      <option key={`${item.providerID}:${item.modelID}`} value={item.modelID}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Thinking</span>
+                  <select value={variant} onChange={(event) => setVariant(event.target.value)}>
+                    {(selectedModel?.variants.length ? selectedModel.variants : ["medium"]).map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Mode</span>
+                  <select value={mode} onChange={(event) => setMode(event.target.value as AgentMode)}>
+                    <option value="build">build</option>
+                    <option value="plan">plan</option>
+                  </select>
+                </label>
+              </div>
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={handlePromptKeyDown}
+                placeholder="Tell OpenCode what to do next..."
+                rows={5}
+              />
+              <div className="session-composer-actions">
+                <span className="session-composer-hint">Enter sends. Shift+Enter adds a newline.</span>
+                <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim() || !providerID || !modelID} title="Send prompt">
+                  <Icon name="open" width="14" height="14" />
+                  <span>{sending ? "Sending..." : "Send"}</span>
+                </button>
+              </div>
+            </form>
           </div>
-          <form className="session-composer" onSubmit={handleSubmit}>
-            <div className="session-controls">
-              <label>
-                <span>Model</span>
-                <select value={modelID} onChange={(event) => setModelID(event.target.value)}>
-                  {(options?.models || []).map((item) => (
-                    <option key={`${item.providerID}:${item.modelID}`} value={item.modelID}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Thinking</span>
-                <select value={variant} onChange={(event) => setVariant(event.target.value)}>
-                  {(selectedModel?.variants.length ? selectedModel.variants : ["medium"]).map((item) => (
-                    <option key={item} value={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Mode</span>
-                <select value={mode} onChange={(event) => setMode(event.target.value as AgentMode)}>
-                  <option value="build">build</option>
-                  <option value="plan">plan</option>
-                </select>
-              </label>
-            </div>
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Tell OpenCode what to do next..."
-              rows={5}
-            />
-            <div className="session-composer-actions">
-              <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim() || !providerID || !modelID}>
-                {sending ? "Sending..." : "Send"}
-              </button>
-            </div>
-          </form>
-        </>
+          <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} mode="overlay" />
+        </div>
       ) : null}
     </section>
   );

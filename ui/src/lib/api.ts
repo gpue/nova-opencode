@@ -3,6 +3,9 @@ import type {
   ComposerOptions,
   Lane,
   PromptOptions,
+  ProviderAuthMethod,
+  ProviderConnectionSummary,
+  ProviderOAuthAuthorization,
   SessionDetail,
   TerminalResult,
   WorkspaceFile,
@@ -10,6 +13,21 @@ import type {
 } from "./types";
 
 const base = "/cell/nova-opencode";
+
+async function requestText(path: string, init?: RequestInit): Promise<string> {
+  const response = await fetch(`${base}${path}`, {
+    headers: {
+      ...(init?.headers || {}),
+    },
+    ...init,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+
+  return response.text();
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${base}${path}`, {
@@ -63,6 +81,30 @@ export function getSessionDetail(sessionId: string): Promise<SessionDetail> {
 
 export function getComposerOptions(): Promise<ComposerOptions> {
   return request("/internal/options/composer");
+}
+
+export function getProviderConnections(): Promise<ProviderConnectionSummary> {
+  return request("/internal/auth/providers").then((payload) => {
+    const connected = Array.isArray((payload as { connected?: unknown }).connected)
+      ? ((payload as { connected: unknown[] }).connected.filter((item): item is string => typeof item === "string"))
+      : [];
+    return { connected };
+  });
+}
+
+export function getProviderAuthMethods(): Promise<Record<string, ProviderAuthMethod[]>> {
+  return request("/api/provider/auth");
+}
+
+export function startProviderOAuth(providerID: string, method: number): Promise<ProviderOAuthAuthorization> {
+  return request(`/api/provider/${providerID}/oauth/authorize`, {
+    method: "POST",
+    body: JSON.stringify({ method }),
+  });
+}
+
+export function disconnectProvider(providerID: string): Promise<boolean> {
+  return request(`/api/auth/${providerID}`, { method: "DELETE" });
 }
 
 export function sendMessage(sessionId: string, prompt: string, options: PromptOptions): Promise<unknown> {
