@@ -1,35 +1,81 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getSessionDetail, sendMessage } from "../lib/api";
-import type { SessionDetail } from "../lib/types";
+import { getComposerOptions, getSessionDetail, sendMessage } from "../lib/api";
+import type { AgentMode, ComposerOptions, PromptOptions, SessionDetail } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
 
 export function SessionPage() {
   const { sessionId = "" } = useParams();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [options, setOptions] = useState<ComposerOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
+  const [providerID, setProviderID] = useState("");
+  const [modelID, setModelID] = useState("");
+  const [variant, setVariant] = useState("medium");
+  const [mode, setMode] = useState<AgentMode>("build");
+
+  useEffect(() => {
+    getComposerOptions()
+      .then((data) => {
+        setOptions(data);
+        if (data.defaultModel) {
+          setProviderID(data.defaultModel.providerID);
+          setModelID(data.defaultModel.modelID);
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load composer options"));
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
+    let cancelled = false;
+
+    const refresh = () => {
+      getSessionDetail(sessionId)
+        .then((data) => {
+          if (!cancelled) {
+            setDetail(data);
+            setError(null);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load conversation");
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+
     setLoading(true);
-    getSessionDetail(sessionId)
-      .then((data) => {
-        setDetail(data);
-        setError(null);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load conversation"))
-      .finally(() => setLoading(false));
+    refresh();
+    const interval = window.setInterval(refresh, 2500);
+
+    const stream = new EventSource(`/cell/nova-opencode/api/global/event`);
+    stream.onmessage = () => refresh();
+    stream.onerror = () => {};
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      stream.close();
+    };
   }, [sessionId]);
+
+  const selectedModel = useMemo(
+    () => options?.models.find((item) => item.providerID === providerID && item.modelID === modelID) ?? null,
+    [modelID, options, providerID],
+  );
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!sessionId || !prompt.trim()) return;
+    if (!sessionId || !prompt.trim() || !providerID || !modelID) return;
     setSending(true);
     try {
-      await sendMessage(sessionId, prompt.trim());
+      const payload: PromptOptions = { providerID, modelID, variant, mode };
+      await sendMessage(sessionId, prompt.trim(), payload);
       setPrompt("");
       const refreshed = await getSessionDetail(sessionId);
       setDetail(refreshed);
@@ -46,6 +92,7 @@ export function SessionPage() {
           <h1>{detail?.title || "Conversation"}</h1>
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>
+        <div className={`session-progress${sending ? " running" : ""}`}>{sending ? "Thinking..." : "Idle"}</div>
       </header>
       {loading ? <div className="page-state">Loading conversation...</div> : null}
       {error ? <div className="page-state error">{error}</div> : null}
@@ -58,6 +105,33 @@ export function SessionPage() {
             {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
           </div>
           <form className="session-composer" onSubmit={handleSubmit}>
+            <div className="session-controls">
+              <label>
+                <span>Model</span>
+                <select value={modelID} onChange={(event) => setModelID(event.target.value)}>
+                  {(options?.models || []).map((item) => (
+                    <option key={`${item.providerID}:${item.modelID}`} value={item.modelID}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Thinking</span>
+                <select value={variant} onChange={(event) => setVariant(event.target.value)}>
+                  {(selectedModel?.variants.length ? selectedModel.variants : ["medium"]).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Mode</span>
+                <select value={mode} onChange={(event) => setMode(event.target.value as AgentMode)}>
+                  <option value="build">build</option>
+                  <option value="plan">plan</option>
+                </select>
+              </label>
+            </div>
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
@@ -65,7 +139,7 @@ export function SessionPage() {
               rows={5}
             />
             <div className="session-composer-actions">
-              <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim()}>
+              <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim() || !providerID || !modelID}>
                 {sending ? "Sending..." : "Send"}
               </button>
             </div>

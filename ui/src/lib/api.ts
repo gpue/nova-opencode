@@ -1,6 +1,8 @@
 import type {
   BoardData,
+  ComposerOptions,
   Lane,
+  PromptOptions,
   SessionDetail,
   TerminalResult,
   WorkspaceFile,
@@ -48,25 +50,36 @@ export function moveSession(sessionId: string, lane: Lane, afterId?: string | nu
 }
 
 export function archiveSession(sessionId: string): Promise<{ ok: boolean }> {
-  return request(`/internal/session/${sessionId}/archive`, {
-    method: "POST",
-  });
+  return request(`/internal/session/${sessionId}/archive`, { method: "POST" });
 }
 
 export function restoreSession(sessionId: string): Promise<{ ok: boolean }> {
-  return request(`/internal/session/${sessionId}/restore`, {
-    method: "POST",
-  });
+  return request(`/internal/session/${sessionId}/restore`, { method: "POST" });
 }
 
 export function getSessionDetail(sessionId: string): Promise<SessionDetail> {
   return request(`/internal/session/${sessionId}`);
 }
 
-export function sendMessage(sessionId: string, prompt: string): Promise<unknown> {
+export function getComposerOptions(): Promise<ComposerOptions> {
+  return request("/internal/options/composer");
+}
+
+export function sendMessage(sessionId: string, prompt: string, options: PromptOptions): Promise<unknown> {
   return request(`/api/session/${sessionId}/message`, {
     method: "POST",
-    body: JSON.stringify({ content: prompt }),
+    body: JSON.stringify({
+      parts: [{ type: "text", text: prompt }],
+      model: {
+        providerID: options.providerID,
+        modelID: options.modelID,
+      },
+      variant: options.variant,
+      mode: options.mode,
+      agent: options.mode,
+      tools: {},
+      noReply: true,
+    }),
   });
 }
 
@@ -75,8 +88,7 @@ export function getWorkspaceTree(): Promise<{ tree: WorkspaceNode[] }> {
 }
 
 export function getWorkspaceFile(path: string): Promise<WorkspaceFile> {
-  const encoded = encodeURIComponent(path);
-  return request(`/internal/workspace/file?path=${encoded}`);
+  return request(`/internal/workspace/file?path=${encodeURIComponent(path)}`);
 }
 
 export function saveWorkspaceFile(path: string, content: string): Promise<{ ok: boolean }> {

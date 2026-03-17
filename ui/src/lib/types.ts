@@ -1,4 +1,5 @@
 export type Lane = "later" | "next" | "now";
+export type AgentMode = "build" | "plan";
 
 export interface SessionSummary {
   id: string;
@@ -55,4 +56,29 @@ export interface TerminalResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+}
+
+export interface ProviderModelOption {
+  providerID: string;
+  modelID: string;
+  name: string;
+  variants: string[];
+}
+
+export interface ComposerOptions {
+  models: ProviderModelOption[];
+  defaultModel: { providerID: string; modelID: string } | null;
+}
+
+export interface PromptOptions {
+  providerID: string;
+  modelID: string;
+  variant: string;
+  mode: AgentMode;
+}
+
+export interface SessionProgressEvent {
+  type: string;
+  sessionID?: string;
+  messageID?: string;
 }

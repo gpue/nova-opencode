@@ -14,11 +14,7 @@ const laneOrder: Array<{ key: Lane; label: string }> = [
 ];
 
 function cloneLanes(lanes: BoardData["lanes"]) {
-  return {
-    later: [...lanes.later],
-    next: [...lanes.next],
-    now: [...lanes.now],
-  } satisfies BoardData["lanes"];
+  return { later: [...lanes.later], next: [...lanes.next], now: [...lanes.now] } satisfies BoardData["lanes"];
 }
 
 function findLaneBySession(lanes: BoardData["lanes"], sessionId: string): Lane | null {
@@ -39,21 +35,32 @@ export function BoardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getBoard()
-      .then((data) => {
-        if (!cancelled) {
-          setBoard(data);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load board");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const refresh = () => {
+      getBoard()
+        .then((data) => {
+          if (!cancelled) {
+            setBoard(data);
+            setError(null);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load board");
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
+
+    refresh();
+    const interval = window.setInterval(refresh, 2500);
+    const stream = new EventSource(`/cell/nova-opencode/api/global/event`);
+    stream.onmessage = () => refresh();
+    stream.onerror = () => {};
+
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      stream.close();
     };
   }, []);
 
@@ -81,24 +88,19 @@ export function BoardPage() {
     const lanes = cloneLanes(board.lanes);
     const fromLane = findLaneBySession(lanes, activeId);
     if (!fromLane) return;
-
     const sourceIndex = lanes[fromLane].findIndex((item) => item.id === activeId);
     if (sourceIndex === -1) return;
-
     const [moved] = lanes[fromLane].splice(sourceIndex, 1);
     const isLaneTarget = laneOrder.some((lane) => lane.key === overId);
     const toLane = isLaneTarget ? (overId as Lane) : findLaneBySession(lanes, overId);
     if (!toLane) return;
-
     moved.lane = toLane;
-
     if (isLaneTarget) {
       lanes[toLane].push(moved);
       setBoard({ ...board, lanes });
       await moveSession(activeId, toLane, null);
       return;
     }
-
     const targetIndex = lanes[toLane].findIndex((item) => item.id === overId);
     if (targetIndex === -1) {
       lanes[toLane].push(moved);
@@ -106,7 +108,6 @@ export function BoardPage() {
       await moveSession(activeId, toLane, null);
       return;
     }
-
     lanes[toLane].splice(targetIndex, 0, moved);
     setBoard({ ...board, lanes });
     await moveSession(activeId, toLane, overId);
@@ -126,20 +127,13 @@ export function BoardPage() {
           </div>
           <div className="board-toolbar">
             <button className="archive-pill" type="button" onClick={() => setWorkspaceOpen(true)}>Workspace</button>
-            <button className="archive-pill" type="button" onClick={() => setTerminalOpen((current) => !current)}>Terminal</button>
+            <button className={`archive-pill${terminalOpen ? " active" : ""}`} type="button" onClick={() => setTerminalOpen((current) => !current)}>Terminal</button>
           </div>
         </div>
         <div className="board-grid-wrap">
           <div className="board-grid">
             {laneOrder.map((lane) => (
-              <LaneColumn
-                key={lane.key}
-                lane={lane.key}
-                title={lane.label}
-                sessions={board.lanes[lane.key]}
-                onCreate={handleCreate}
-                onArchive={handleArchive}
-              />
+              <LaneColumn key={lane.key} lane={lane.key} title={lane.label} sessions={board.lanes[lane.key]} onCreate={handleCreate} onArchive={handleArchive} />
             ))}
           </div>
           <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />

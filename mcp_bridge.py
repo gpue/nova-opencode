@@ -337,6 +337,11 @@ async def _build_session_summary(session: dict[str, Any]) -> dict[str, Any]:
     record = _get_record(session_id)
     messages = await _fetch_messages(session_id, limit=20)
     lane = record.lane if record else "next"
+    status = session.get("status")
+    if isinstance(status, dict):
+        running = status.get("type") not in (None, "idle", "complete")
+    else:
+        running = status not in (None, "idle", "complete")
     return {
         "id": session_id,
         "title": _extract_title(session, messages),
@@ -346,7 +351,7 @@ async def _build_session_summary(session: dict[str, Any]) -> dict[str, Any]:
         else None,
         "lane": lane,
         "archived": record.archived if record else False,
-        "running": bool(session.get("status") not in (None, "idle", "complete")),
+        "running": bool(running),
         "messageCount": len(messages),
     }
 
@@ -505,6 +510,46 @@ async def _startup() -> None:
 @app.get("/board")
 async def get_board() -> dict[str, Any]:
     return await _board_payload()
+
+
+@app.get("/options/composer")
+async def get_composer_options() -> dict[str, Any]:
+    async with _client() as client:
+        response = await client.get("/config/providers")
+        response.raise_for_status()
+        payload = response.json()
+
+    models: list[dict[str, Any]] = []
+    providers = payload.get("providers", []) if isinstance(payload, dict) else []
+    for provider in providers:
+        provider_id = provider.get("id")
+        model_map = provider.get("models", {})
+        if not isinstance(provider_id, str) or not isinstance(model_map, dict):
+            continue
+        for model_id, model in model_map.items():
+            if not isinstance(model_id, str) or not isinstance(model, dict):
+                continue
+            variants = model.get("variants", {})
+            models.append(
+                {
+                    "providerID": provider_id,
+                    "modelID": model_id,
+                    "name": model.get("name") or model_id,
+                    "variants": list(variants.keys())
+                    if isinstance(variants, dict) and variants
+                    else ["medium"],
+                }
+            )
+
+    default = payload.get("default", {}) if isinstance(payload, dict) else {}
+    default_model = None
+    if isinstance(default, dict):
+        for provider_id, model_id in default.items():
+            if isinstance(provider_id, str) and isinstance(model_id, str):
+                default_model = {"providerID": provider_id, "modelID": model_id}
+                break
+
+    return {"models": models, "defaultModel": default_model}
 
 
 @app.get("/archive")

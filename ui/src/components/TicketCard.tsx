@@ -22,7 +22,7 @@ export function TicketCard({ session, onArchive }: TicketCardProps) {
       <div className="ticket-card-top">
         <span className="ticket-move-label">Move</span>
         <div className="ticket-status-wrap">
-          <span className={`ticket-status${session.running ? " running" : " idle"}`}>{session.running ? "Live" : "Idle"}</span>
+          <span className={`ticket-status${session.running ? " running" : " idle"}`}>{session.running ? "Thinking..." : "Idle"}</span>
         </div>
       </div>
       <Link to={`/session/${session.id}`} className="ticket-link">
