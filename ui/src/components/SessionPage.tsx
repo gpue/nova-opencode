@@ -69,6 +69,16 @@ export function SessionPage() {
     [modelID, options, providerID],
   );
 
+  const latestAssistant = useMemo(() => {
+    const messages = detail?.messages ?? [];
+    return [...messages].reverse().find((message) => (message.info?.role || message.role) === "assistant") ?? null;
+  }, [detail]);
+
+  const waitingForInput = useMemo(() => {
+    const parts = latestAssistant?.parts ?? [];
+    return parts.some((part) => part.type === "tool" && (part as { state?: { status?: string } }).state?.status === "running");
+  }, [latestAssistant]);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!sessionId || !prompt.trim() || !providerID || !modelID) return;
@@ -92,7 +102,9 @@ export function SessionPage() {
           <h1>{detail?.title || "Conversation"}</h1>
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>
-        <div className={`session-progress${detail?.running ? " running" : ""}`}>{detail?.running ? "Thinking..." : "Idle"}</div>
+        <div className={`session-progress${detail?.running ? " running" : ""}`}>
+          {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
+        </div>
       </header>
       {loading ? <div className="page-state">Loading conversation...</div> : null}
       {error ? <div className="page-state error">{error}</div> : null}

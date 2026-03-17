@@ -10,7 +10,7 @@ interface TicketCardProps {
 }
 
 function TicketStatus({ running }: { running: boolean }) {
-  return <span className={`ticket-status${running ? " running" : " idle"}`}>{running ? "Thinking" : "Idle"}</span>;
+  return <span className={`ticket-status${running ? " running" : " idle"}`}>{running ? "Active" : "Idle"}</span>;
 }
 
 export function TicketCard({ session, onArchive, dragOverlay = false }: TicketCardProps) {

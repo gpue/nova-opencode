@@ -26,6 +26,10 @@ export interface SessionMessagePart {
 
 export interface SessionMessage {
   id: string;
+  info?: {
+    role?: string;
+    [key: string]: unknown;
+  };
   role?: string;
   createdAt?: string;
   parts?: SessionMessagePart[];
