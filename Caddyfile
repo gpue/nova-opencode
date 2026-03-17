@@ -1,48 +1,17 @@
-# Caddy reverse proxy for nova-opencode
-# Consolidates OpenCode web UI (4096) and MCP bridge (8081) behind
-# a single port (8080) under the BASE_PATH prefix.
-#
-# {$BASE_PATH} is set via environment variable (default: /cell/nova-opencode)
-#
-# OpenCode serves all assets and API endpoints from "/" (root-relative).
-# Since we serve behind a sub-path, we use the replace-response module to
-# rewrite root-relative paths in HTML/JS/CSS responses so the browser
-# fetches them from the correct sub-path prefix.  Vite dynamic imports
-# use document.baseURI which inherits from the page URL, so they resolve
-# correctly without a <base> tag.
-#
-# The JS API client uses location.origin as the base URL for REST calls.
-# We rewrite this to append the sub-path so API calls hit the Caddy proxy
-# instead of the Nova host root.
-
-{
-	order replace after encode
-}
-
 :8080 {
-	# Health check — must come before catch-all proxy handlers.
-	# The operator probes {BASE_PATH}/health, not /health.
+	# Health check
 	handle {$BASE_PATH}/health {
 		respond "ok" 200
 	}
 
-	# Serve the app icon statically
+	# App icon
 	handle {$BASE_PATH}/app_icon.svg {
 		root * /app/static
 		rewrite * /app_icon.svg
 		file_server
 	}
 
-	# Serve a custom preload script that normalizes stale persisted server URLs
-	# before the main bundle starts.
-	handle {$BASE_PATH}/oc-theme-preload.js {
-		root * /app/static
-		rewrite * /oc-theme-preload.js
-		header Cache-Control "no-store"
-		file_server
-	}
-
-	# MCP bridge endpoint — strip prefix, proxy to internal MCP server
+	# MCP bridge
 	handle_path {$BASE_PATH}/mcp/* {
 		reverse_proxy localhost:8081
 	}
@@ -50,83 +19,33 @@
 		reverse_proxy localhost:8081
 	}
 
-	# Versioned asset alias to defeat stale edge caches. After handle_path
-	# strips {$BASE_PATH}/assets-v-b360b34, rewrite the remainder back under
-	# OpenCode's real /assets/* tree.
-	handle_path {$BASE_PATH}/assets-v-b360b34/* {
-		rewrite * /assets{uri}
-		reverse_proxy localhost:4096 {
-			header_up Accept-Encoding identity
-		}
-		header Cache-Control "no-store"
-		replace {
-			"\"/assets/" "\"{$BASE_PATH}/assets-v-b360b34/"
-			"(/assets/" "({$BASE_PATH}/assets-v-b360b34/"
-			"sidebar:{opened:!1" "sidebar:{opened:!0"
-			"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(wh,{project:St,merged:!0})"
-			"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
-		}
+	# Custom internal REST API (board/archive/session detail)
+	handle {$BASE_PATH}/internal/* {
+		reverse_proxy localhost:8081
 	}
 
-	# OpenCode web UI — strip prefix, proxy to OpenCode server.
-	# Rewrite root-relative asset paths in HTML/JS/CSS responses so the
-	# browser fetches them from under the sub-path prefix.
-	#
-	# SSE endpoints (/event, /global/event) are proxied WITHOUT the replace
-	# module because replace buffers the entire response body, which blocks
-	# streaming (SSE responses never end).  We use separate handle blocks
-	# inside a route to ensure SSE requests bypass the replace handler.
-	handle_path {$BASE_PATH}/* {
-		route {
-			# SSE — direct proxy, no replace buffering
-			@sse path /event /global/event
-			handle @sse {
-				reverse_proxy localhost:4096
-			}
-
-			# Everything else — proxy with response rewriting
-			handle {
-				reverse_proxy localhost:4096 {
-					header_up Accept-Encoding identity
-				}
-				header Cache-Control "no-store"
-				replace {
-					# Route the main JS/CSS through a versioned asset alias so edge
-					# caches cannot serve older rewritten bundles after deploys.
-					"src=\"/assets/" "src=\"/assets-v-b360b34/"
-					"href=\"/assets/" "href=\"/assets-v-b360b34/"
-					# Rewrite root-relative paths in HTML attributes
-					"src=\"/" "src=\"{$BASE_PATH}/"
-					"href=\"/" "href=\"{$BASE_PATH}/"
-					"content=\"/" "content=\"{$BASE_PATH}/"
-					# Rewrite root-relative asset paths in JS (fonts, workers)
-					"\"/assets/" "\"{$BASE_PATH}/assets-v-b360b34/"
-					# Rewrite root-relative asset paths in CSS url() references
-					"(/assets/" "({$BASE_PATH}/assets-v-b360b34/"
-					# Default the desktop sidebar to open so first-load users see the
-					# onboarding/project UI instead of an empty content pane.
-					"sidebar:{opened:!1" "sidebar:{opened:!0"
-					# Desktop mounted an empty panel until an active project was
-					# resolved. Render the sidebar panel unconditionally, like the
-					# mobile branch, so onboarding/fallback content appears.
-					"renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(me,{get when(){return St()},get children(){return v(wh,{project:St,merged:!0})}})" "renderPanel:()=>$?v(wh,{project:St,mobile:!0}):v(wh,{project:St,merged:!0})"
-					# Rewrite the API base URL so the JS client prepends the
-					# sub-path prefix.
-					"localhost:4096\":location.origin" "localhost:4096\":location.origin+\"{$BASE_PATH}\""
-					# Keep the custom preload script fresh as it fixes stale local
-					# storage before the main bundle runs.
-					"/cell/nova-opencode/oc-theme-preload.js" "/cell/nova-opencode/oc-theme-preload.js?v=5"
-				}
-			}
-		}
+	# OpenCode backend API
+	handle_path {$BASE_PATH}/api/* {
+		reverse_proxy localhost:4096
 	}
 
-	# Bare path redirect (no trailing slash)
+	# Frontend assets
+	handle {$BASE_PATH}/assets/* {
+		root * /app/ui
+		file_server
+	}
+
+	# SPA routes
 	handle {$BASE_PATH} {
-		redir {$BASE_PATH}/ permanent
+		redir {$BASE_PATH}/ temporary
+	}
+	handle {$BASE_PATH}/* {
+		root * /app/ui
+		try_files {path} /index.html
+		file_server
 	}
 
-	# Fallback health check (bare /health, no prefix)
+	# Fallback health check
 	handle /health {
 		respond "ok" 200
 	}

@@ -17,7 +17,16 @@ RUN xcaddy build v${CADDY_VERSION} \
         --with github.com/caddyserver/replace-response \
         --output /usr/local/bin/caddy
 
-# ── Stage 2: Final image ───────────────────────────────────────────
+# ── Stage 2: Build custom frontend ─────────────────────────────────
+FROM node:22-bookworm-slim AS ui-builder
+
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ui/tsconfig.json ui/tsconfig.app.json ui/vite.config.ts ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
+# ── Stage 3: Final image ───────────────────────────────────────────
 FROM debian:bookworm-slim
 
 # ── Versions ────────────────────────────────────────────────────────
@@ -59,6 +68,7 @@ RUN mkdir -p /workspace \
     && mkdir -p /home/opencode/.config/opencode \
     && mkdir -p /home/opencode/.local/share/opencode \
     && mkdir -p /app/static \
+    && mkdir -p /app/ui \
     && mkdir -p /caddy/config /caddy/data \
     && chown -R opencode:opencode /workspace /home/opencode /app /caddy
 
@@ -70,6 +80,7 @@ COPY --chown=opencode:opencode Caddyfile /app/Caddyfile
 COPY --chown=opencode:opencode app_icon.svg /app/static/app_icon.svg
 COPY --chown=opencode:opencode static/ /app/static/
 COPY --chown=opencode:opencode workspace/ /workspace/
+COPY --from=ui-builder --chown=opencode:opencode /ui/dist/ /app/ui/
 
 RUN chmod +x /app/start-opencode.sh
 
