@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
@@ -11,17 +11,34 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
-  const [command, setCommand] = useState("");
-  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const commandRef = useRef("");
+  const runningRef = useRef(false);
+
+  function prompt() {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.write("\r\n\x1b[35mnova-opencode\x1b[0m:\x1b[36m/workspace\x1b[0m$ ");
+    commandRef.current = "";
+  }
+
+  function writeResult(result: TerminalResult) {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    if (result.stdout) terminal.writeln(result.stdout.trimEnd());
+    if (result.stderr) terminal.writeln(`\x1b[31m${result.stderr.trimEnd()}\x1b[0m`);
+    terminal.writeln(`\x1b[90mexit ${result.exitCode}\x1b[0m`);
+    prompt();
+  }
 
   useEffect(() => {
     if (!hostRef.current || terminalRef.current) return;
     const terminal = new Terminal({
       convertEol: true,
+      cursorBlink: true,
       theme: {
         background: "#0b1020",
         foreground: "#e2e8f0",
@@ -36,7 +53,47 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
     terminal.open(hostRef.current);
     fitAddon.fit();
     terminal.writeln("Nova OpenCode terminal ready.");
-    terminal.writeln("$ ");
+    prompt();
+
+    terminal.onData(async (data) => {
+      if (!open) return;
+      if (runningRef.current) return;
+      if (data === "\r") {
+        const command = commandRef.current.trim();
+        runningRef.current = true;
+        terminal.write("\r\n");
+        if (!command) {
+          runningRef.current = false;
+          prompt();
+          return;
+        }
+        try {
+          const result = await runTerminalCommand(command);
+          writeResult(result);
+          setError(null);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Terminal command failed";
+          setError(message);
+          terminal.writeln(`\x1b[31m${message}\x1b[0m`);
+          prompt();
+        } finally {
+          runningRef.current = false;
+        }
+        return;
+      }
+      if (data === "\u007f") {
+        if (commandRef.current.length > 0) {
+          commandRef.current = commandRef.current.slice(0, -1);
+          terminal.write("\b \b");
+        }
+        return;
+      }
+      if (data >= " ") {
+        commandRef.current += data;
+        terminal.write(data);
+      }
+    });
+
     terminalRef.current = terminal;
     fitRef.current = fitAddon;
     const onResize = () => fitAddon.fit();
@@ -47,39 +104,19 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
+      document.body.style.overflow = "hidden";
       window.setTimeout(() => fitRef.current?.fit(), 50);
+    } else {
+      document.body.style.overflow = "";
     }
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
-
-  function writeResult(result: TerminalResult) {
-    const terminal = terminalRef.current;
-    if (!terminal) return;
-    terminal.writeln(`$ ${result.command}`);
-    if (result.stdout) terminal.writeln(result.stdout.trimEnd());
-    if (result.stderr) terminal.writeln(`\x1b[31m${result.stderr.trimEnd()}\x1b[0m`);
-    terminal.writeln(`\x1b[90mexit ${result.exitCode}\x1b[0m`);
-    terminal.writeln("$ ");
-  }
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!command.trim()) return;
-    setRunning(true);
-    setError(null);
-    try {
-      const output = await runTerminalCommand(command.trim());
-      writeResult(output);
-      setCommand("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terminal command failed");
-    } finally {
-      setRunning(false);
-    }
-  }
 
   return (
     <section className={`terminal-overlay${open ? " open" : ""}`}>
@@ -93,12 +130,6 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
           <button className="panel-close-button" type="button" onClick={onClose}>Close</button>
         </div>
         <div className="terminal-screen" ref={hostRef} />
-        <form className="terminal-form" onSubmit={handleSubmit}>
-          <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder="e.g. ls -la" />
-          <button className="lane-new-button" type="submit" disabled={running || !command.trim()}>
-            {running ? "Running..." : "Run"}
-          </button>
-        </form>
         {error ? <div className="page-state error terminal-error">{error}</div> : null}
       </div>
     </section>

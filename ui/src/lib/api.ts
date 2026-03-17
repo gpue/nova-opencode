@@ -78,7 +78,6 @@ export function sendMessage(sessionId: string, prompt: string, options: PromptOp
       mode: options.mode,
       agent: options.mode,
       tools: {},
-      noReply: true,
     }),
   });
 }

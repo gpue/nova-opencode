@@ -25,6 +25,7 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
 }
 a { color: inherit; text-decoration: none; }
 button, textarea, input, select { font: inherit; }
@@ -46,9 +47,9 @@ button, textarea, input, select { font: inherit; }
 .nova-nav { display: flex; gap: 8px; }
 .nova-nav-link { padding: 8px 14px; border-radius: 10px; color: var(--text-secondary); transition: 150ms ease; }
 .nova-nav-link:hover, .nova-nav-link.active { background: rgba(142, 86, 252, 0.12); color: var(--color-primary-light); }
-.app-main { padding-top: var(--header-height); min-height: 100vh; }
+.app-main { padding-top: var(--header-height); height: 100vh; overflow: hidden; }
 
-.board-page, .archive-page, .session-page { min-height: calc(100vh - var(--header-height)); padding: 24px; }
+.board-page, .archive-page, .session-page { height: calc(100vh - var(--header-height)); padding: 24px; overflow: hidden; }
 .board-page-head, .archive-head, .session-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .board-page-head h1, .archive-head h1, .session-header h1 { margin: 0 0 6px; font-size: 1.5rem; }
 .board-page-head p, .archive-head p, .session-header p { margin: 0; color: var(--text-secondary); }
@@ -147,8 +148,6 @@ button, textarea, input, select { font: inherit; }
 .terminal-overlay.open .terminal-panel.terminal-panel-sheet { transform: translateY(0); }
 .terminal-screen { height: calc(100% - 124px); padding: 10px 14px 0; background: #0b1020; }
 .xterm-viewport::-webkit-scrollbar { width: 8px; }
-.terminal-form { display: flex; gap: 10px; padding: 14px 18px 18px; border-top: 1px solid rgba(148,163,184,0.12); background: #0b1020; }
-.terminal-form input { flex: 1; border-radius: 12px; border: 1px solid var(--border-subtle); background: #111827; color: var(--text-primary); padding: 12px 14px; outline: none; }
 .terminal-error { margin: 0 18px 18px; }
 
 .session-page { display: flex; flex-direction: column; }
@@ -181,7 +180,7 @@ button, textarea, input, select { font: inherit; }
 
 @media (max-width: 1100px) {
   .board-grid { grid-template-columns: 1fr; height: auto; }
-  .board-grid-wrap { min-height: auto; }
+  .board-grid-wrap { min-height: auto; overflow: auto; }
   .board-lane { min-height: 320px; }
   .archive-card { flex-direction: column; }
   .workspace-panel-body { grid-template-columns: 1fr; }
