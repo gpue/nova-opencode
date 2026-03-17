@@ -1,17 +1,14 @@
 :8080 {
-	# Health check
 	handle {$BASE_PATH}/health {
 		respond "ok" 200
 	}
 
-	# App icon
 	handle {$BASE_PATH}/app_icon.svg {
 		root * /app/static
 		rewrite * /app_icon.svg
 		file_server
 	}
 
-	# MCP bridge
 	handle_path {$BASE_PATH}/mcp/* {
 		reverse_proxy localhost:8081
 	}
@@ -19,33 +16,24 @@
 		reverse_proxy localhost:8081
 	}
 
-	# Custom internal REST API (board/archive/session detail)
 	handle_path {$BASE_PATH}/internal/* {
 		reverse_proxy localhost:8081
 	}
 
-	# OpenCode backend API
 	handle_path {$BASE_PATH}/api/* {
 		reverse_proxy localhost:4096
 	}
 
-	# Frontend assets
-	handle_path {$BASE_PATH}/assets/* {
-		root * /app/ui
-		file_server
-	}
-
-	# SPA routes
 	handle {$BASE_PATH} {
 		redir {$BASE_PATH}/ temporary
 	}
-	handle {$BASE_PATH}/* {
+
+	handle_path {$BASE_PATH}/* {
 		root * /app/ui
 		try_files {path} /index.html
 		file_server
 	}
 
-	# Fallback health check
 	handle /health {
 		respond "ok" 200
 	}
