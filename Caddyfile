@@ -20,7 +20,7 @@
 	}
 
 	# Custom internal REST API (board/archive/session detail)
-	handle {$BASE_PATH}/internal/* {
+	handle_path {$BASE_PATH}/internal/* {
 		reverse_proxy localhost:8081
 	}
 
