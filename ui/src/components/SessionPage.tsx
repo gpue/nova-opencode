@@ -15,7 +15,7 @@ export function SessionPage() {
   const [providerID, setProviderID] = useState("");
   const [modelID, setModelID] = useState("");
   const [variant, setVariant] = useState("medium");
-  const [mode, setMode] = useState<AgentMode>("build");
+  const [mode, setMode] = useState<AgentMode>("plan");
 
   useEffect(() => {
     getComposerOptions()
@@ -92,7 +92,7 @@ export function SessionPage() {
           <h1>{detail?.title || "Conversation"}</h1>
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>
-        <div className={`session-progress${sending ? " running" : ""}`}>{sending ? "Thinking..." : "Idle"}</div>
+        <div className={`session-progress${detail?.running ? " running" : ""}`}>{detail?.running ? "Thinking..." : "Idle"}</div>
       </header>
       {loading ? <div className="page-state">Loading conversation...</div> : null}
       {error ? <div className="page-state error">{error}</div> : null}
