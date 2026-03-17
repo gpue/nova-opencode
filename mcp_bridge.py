@@ -318,6 +318,12 @@ async def _fetch_session_detail(session_id: str) -> dict[str, Any]:
         messages_response = await client.get(f"/session/{session_id}/message")
         messages_response.raise_for_status()
         messages = messages_response.json()
+        status = session.get("status")
+        if isinstance(status, dict):
+            running = status.get("type") not in (None, "idle", "complete")
+        else:
+            running = status not in (None, "idle", "complete")
+
         return {
             "id": session_id,
             "title": _extract_title(
@@ -326,6 +332,7 @@ async def _fetch_session_detail(session_id: str) -> dict[str, Any]:
             "updatedAt": session.get("time", {}).get("updated")
             if isinstance(session.get("time"), dict)
             else None,
+            "running": bool(running),
             "messages": messages if isinstance(messages, list) else [],
         }
 

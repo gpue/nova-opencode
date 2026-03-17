@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { DndContext, DragEndEvent, PointerSensor, closestCorners, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, DragOverlay, PointerSensor, closestCorners, useSensor, useSensors } from "@dnd-kit/core";
 import { useNavigate } from "react-router-dom";
 import { archiveSession, createSession, getBoard, moveSession } from "../lib/api";
-import type { BoardData, Lane } from "../lib/types";
+import type { BoardData, Lane, SessionSummary } from "../lib/types";
 import { LaneColumn } from "./LaneColumn";
 import { TerminalPanel } from "./TerminalPanel";
+import { TicketCard } from "./TicketCard";
 import { WorkspacePanel } from "./WorkspacePanel";
 
 const laneOrder: Array<{ key: Lane; label: string }> = [
@@ -24,14 +25,23 @@ function findLaneBySession(lanes: BoardData["lanes"], sessionId: string): Lane |
   return null;
 }
 
+function findSession(lanes: BoardData["lanes"], sessionId: string): SessionSummary | null {
+  for (const lane of laneOrder) {
+    const match = lanes[lane.key].find((session) => session.id === sessionId);
+    if (match) return match;
+  }
+  return null;
+}
+
 export function BoardPage() {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const navigate = useNavigate();
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
     let cancelled = false;
@@ -81,37 +91,52 @@ export function BoardPage() {
     });
   }
 
+  function handleDragStart(event: { active: { id: string | number } }) {
+    setActiveId(String(event.active.id));
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
     if (!board || !event.over) return;
-    const activeId = String(event.active.id);
+    const activeIdValue = String(event.active.id);
     const overId = String(event.over.id);
     const lanes = cloneLanes(board.lanes);
-    const fromLane = findLaneBySession(lanes, activeId);
+    const fromLane = findLaneBySession(lanes, activeIdValue);
     if (!fromLane) return;
-    const sourceIndex = lanes[fromLane].findIndex((item) => item.id === activeId);
+    const sourceIndex = lanes[fromLane].findIndex((item) => item.id === activeIdValue);
     if (sourceIndex === -1) return;
+
     const [moved] = lanes[fromLane].splice(sourceIndex, 1);
     const isLaneTarget = laneOrder.some((lane) => lane.key === overId);
     const toLane = isLaneTarget ? (overId as Lane) : findLaneBySession(lanes, overId);
     if (!toLane) return;
     moved.lane = toLane;
+
     if (isLaneTarget) {
       lanes[toLane].push(moved);
       setBoard({ ...board, lanes });
-      await moveSession(activeId, toLane, null);
+      await moveSession(activeIdValue, toLane, null);
       return;
     }
+
     const targetIndex = lanes[toLane].findIndex((item) => item.id === overId);
     if (targetIndex === -1) {
       lanes[toLane].push(moved);
       setBoard({ ...board, lanes });
-      await moveSession(activeId, toLane, null);
+      await moveSession(activeIdValue, toLane, null);
       return;
     }
+
     lanes[toLane].splice(targetIndex, 0, moved);
     setBoard({ ...board, lanes });
-    await moveSession(activeId, toLane, overId);
+    await moveSession(activeIdValue, toLane, overId);
   }
+
+  function handleDragCancel() {
+    setActiveId(null);
+  }
+
+  const activeSession = board && activeId ? findSession(board.lanes, activeId) : null;
 
   const content = useMemo(() => {
     if (loading) return <div className="page-state">Loading board...</div>;
@@ -119,7 +144,7 @@ export function BoardPage() {
     if (!board) return <div className="page-state">No board data.</div>;
 
     return (
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div className="board-page-head">
           <div>
             <h1>Conversation board</h1>
@@ -139,9 +164,10 @@ export function BoardPage() {
           <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />
         </div>
         <TerminalPanel open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+        <DragOverlay>{activeSession ? <TicketCard session={activeSession} dragOverlay /> : null}</DragOverlay>
       </DndContext>
     );
-  }, [board, error, loading, sensors, workspaceOpen, terminalOpen, navigate]);
+  }, [activeSession, board, error, loading, sensors, workspaceOpen, terminalOpen, navigate]);
 
   return <section className="board-page">{content}</section>;
 }

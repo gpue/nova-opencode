@@ -5,24 +5,30 @@ import type { SessionSummary } from "../lib/types";
 
 interface TicketCardProps {
   session: SessionSummary;
-  onArchive: (sessionId: string) => void;
+  onArchive?: (sessionId: string) => void;
+  dragOverlay?: boolean;
 }
 
-export function TicketCard({ session, onArchive }: TicketCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: session.id });
+function TicketStatus({ running }: { running: boolean }) {
+  return <span className={`ticket-status${running ? " running" : " idle"}`}>{running ? "Thinking" : "Idle"}</span>;
+}
+
+export function TicketCard({ session, onArchive, dragOverlay = false }: TicketCardProps) {
+  const sortable = useSortable({ id: session.id, disabled: dragOverlay });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = sortable;
 
   return (
     <article
-      ref={setNodeRef}
-      className={`ticket-card${isDragging ? " dragging" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
+      ref={dragOverlay ? undefined : setNodeRef}
+      className={`ticket-card${isDragging ? " dragging" : ""}${dragOverlay ? " overlay" : ""}`}
+      style={dragOverlay ? undefined : { transform: CSS.Transform.toString(transform), transition }}
+      {...(dragOverlay ? {} : attributes)}
+      {...(dragOverlay ? {} : listeners)}
     >
       <div className="ticket-card-top">
         <span className="ticket-move-label">Move</span>
         <div className="ticket-status-wrap">
-          <span className={`ticket-status${session.running ? " running" : " idle"}`}>{session.running ? "Thinking..." : "Idle"}</span>
+          <TicketStatus running={session.running} />
         </div>
       </div>
       <Link to={`/session/${session.id}`} className="ticket-link">
@@ -35,9 +41,11 @@ export function TicketCard({ session, onArchive }: TicketCardProps) {
       </div>
       <div className="ticket-actions">
         <Link to={`/session/${session.id}`} className="ticket-action-link">Open</Link>
-        <button className="ticket-action-button" type="button" onClick={(event) => { event.stopPropagation(); onArchive(session.id); }}>
-          Archive
-        </button>
+        {onArchive ? (
+          <button className="ticket-action-button" type="button" onClick={(event) => { event.stopPropagation(); onArchive(session.id); }}>
+            Archive
+          </button>
+        ) : null}
       </div>
     </article>
   );

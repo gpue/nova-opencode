@@ -36,6 +36,7 @@ export interface SessionDetail {
   id: string;
   title: string;
   updatedAt: string | null;
+  running: boolean;
   messages: SessionMessage[];
 }
 
