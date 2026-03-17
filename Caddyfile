@@ -25,10 +25,7 @@
 	}
 
 	@baseExact path {$BASE_PATH}
-	handle @baseExact {
-		header Cache-Control "no-store"
-		redir {$BASE_PATH}/ temporary
-	}
+	redir @baseExact {$BASE_PATH}/ 302
 
 	handle_path {$BASE_PATH}/* {
 		root * /app/ui
