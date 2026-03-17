@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
 import subprocess
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -29,6 +30,7 @@ DB_PATH = STATE_DIR / "state.db"
 OPENCODE_USERNAME = os.environ.get("OPENCODE_SERVER_USERNAME", "")
 OPENCODE_PASSWORD = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
 LANES = ("later", "next", "now")
+ACTIVE_RUNS: set[str] = set()
 
 
 class CreateSessionRequest(BaseModel):
@@ -47,6 +49,14 @@ class WorkspaceFileUpdateRequest(BaseModel):
 
 class TerminalCommandRequest(BaseModel):
     command: str
+
+
+class PromptStartRequest(BaseModel):
+    prompt: str
+    providerID: str
+    modelID: str
+    variant: str
+    mode: str
 
 
 class SessionBoardRecord(BaseModel):
@@ -299,6 +309,36 @@ async def _fetch_sessions() -> list[dict[str, Any]]:
         return data if isinstance(data, list) else []
 
 
+async def _run_prompt_in_background(
+    session_id: str, payload: PromptStartRequest
+) -> None:
+    ACTIVE_RUNS.add(session_id)
+    try:
+        async with _client() as client:
+            response = await client.post(
+                f"/session/{session_id}/message",
+                json={
+                    "parts": [{"type": "text", "text": payload.prompt}],
+                    "model": {
+                        "providerID": payload.providerID,
+                        "modelID": payload.modelID,
+                    },
+                    "variant": payload.variant,
+                    "mode": payload.mode,
+                    "agent": payload.mode,
+                    "tools": {},
+                },
+                timeout=300.0,
+            )
+            response.raise_for_status()
+    finally:
+        ACTIVE_RUNS.discard(session_id)
+
+
+def _run_prompt_job(session_id: str, payload: PromptStartRequest) -> None:
+    asyncio.run(_run_prompt_in_background(session_id, payload))
+
+
 async def _fetch_messages(session_id: str, limit: int = 25) -> list[dict[str, Any]]:
     async with _client() as client:
         response = await client.get(
@@ -332,7 +372,7 @@ async def _fetch_session_detail(session_id: str) -> dict[str, Any]:
             "updatedAt": session.get("time", {}).get("updated")
             if isinstance(session.get("time"), dict)
             else None,
-            "running": bool(running),
+            "running": bool(running or session_id in ACTIVE_RUNS),
             "messages": messages if isinstance(messages, list) else [],
         }
 
@@ -358,7 +398,7 @@ async def _build_session_summary(session: dict[str, Any]) -> dict[str, Any]:
         else None,
         "lane": lane,
         "archived": record.archived if record else False,
-        "running": bool(running),
+        "running": bool(running or session_id in ACTIVE_RUNS),
         "messageCount": len(messages),
     }
 
@@ -591,6 +631,15 @@ async def create_session_internal(payload: CreateSessionRequest) -> dict[str, An
         )
     _upsert_session_state(session_id, lane, archived=False, last_lane=lane)
     return {"id": session_id}
+
+
+@app.post("/session/{session_id}/prompt")
+async def start_prompt_internal(
+    session_id: str, payload: PromptStartRequest, background_tasks: BackgroundTasks
+) -> dict[str, Any]:
+    ACTIVE_RUNS.add(session_id)
+    background_tasks.add_task(_run_prompt_job, session_id, payload)
+    return {"ok": True, "sessionId": session_id}
 
 
 @app.patch("/session/{session_id}/lane")

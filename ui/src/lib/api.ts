@@ -66,18 +66,14 @@ export function getComposerOptions(): Promise<ComposerOptions> {
 }
 
 export function sendMessage(sessionId: string, prompt: string, options: PromptOptions): Promise<unknown> {
-  return request(`/api/session/${sessionId}/message`, {
+  return request(`/internal/session/${sessionId}/prompt`, {
     method: "POST",
     body: JSON.stringify({
-      parts: [{ type: "text", text: prompt }],
-      model: {
-        providerID: options.providerID,
-        modelID: options.modelID,
-      },
+      prompt,
+      providerID: options.providerID,
+      modelID: options.modelID,
       variant: options.variant,
       mode: options.mode,
-      agent: options.mode,
-      tools: {},
     }),
   });
 }
