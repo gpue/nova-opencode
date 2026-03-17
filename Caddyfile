@@ -30,7 +30,7 @@
 	}
 
 	# Frontend assets
-	handle {$BASE_PATH}/assets/* {
+	handle_path {$BASE_PATH}/assets/* {
 		root * /app/ui
 		file_server
 	}
