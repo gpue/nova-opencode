@@ -18,6 +18,9 @@ export function Header() {
         </div>
       </div>
       <div className="nova-header-right">
+        <a href="/cell" className="archive-pill" title="Back to Nova home">
+          Home
+        </a>
         <nav className="nova-nav">
           <NavLink to="/" className={({ isActive }) => `nova-nav-link${isActive ? " active" : ""}`} end>
             Board

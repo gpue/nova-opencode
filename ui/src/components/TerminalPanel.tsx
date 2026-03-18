@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
-import { runTerminalCommand } from "../lib/api";
+import { interruptTerminalCommand, runTerminalCommand } from "../lib/api";
 import type { TerminalResult } from "../lib/types";
 import { Icon } from "./Icon";
 
@@ -18,6 +18,8 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const commandRef = useRef("");
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
   const runningRef = useRef(false);
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -26,6 +28,29 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
     if (!terminal) return;
     terminal.write("\r\n\x1b[35mnova-opencode\x1b[0m:\x1b[36m/workspace\x1b[0m$ ");
     commandRef.current = "";
+    historyIndexRef.current = historyRef.current.length;
+  }
+
+  function rewriteInput(nextValue: string) {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    for (let i = 0; i < commandRef.current.length; i += 1) {
+      terminal.write("\b \b");
+    }
+    commandRef.current = nextValue;
+    if (nextValue) {
+      terminal.write(nextValue);
+    }
+  }
+
+  function historyMove(direction: -1 | 1) {
+    if (runningRef.current) return;
+    const history = historyRef.current;
+    if (!history.length) return;
+    const nextIndex = Math.max(0, Math.min(history.length, historyIndexRef.current + direction));
+    historyIndexRef.current = nextIndex;
+    const nextCommand = nextIndex >= history.length ? "" : history[nextIndex];
+    rewriteInput(nextCommand);
   }
 
   function writeResult(result: TerminalResult) {
@@ -80,6 +105,8 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
           prompt();
           return;
         }
+        historyRef.current.push(command);
+        historyIndexRef.current = historyRef.current.length;
         try {
           const result = await runTerminalCommand(command);
           writeResult(result);
@@ -92,6 +119,34 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
         } finally {
           runningRef.current = false;
         }
+        return;
+      }
+      if (data === "\u0003") {
+        if (runningRef.current) {
+          terminal.write("^C\r\n");
+          try {
+            const interrupt = await interruptTerminalCommand();
+            if (interrupt.signaled) {
+              terminal.writeln("\x1b[90minterrupt signal sent\x1b[0m");
+            } else {
+              terminal.writeln("\x1b[90mno running command\x1b[0m");
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to interrupt command";
+            terminal.writeln(`\x1b[31m${message}\x1b[0m`);
+          }
+          return;
+        }
+        terminal.write("^C");
+        prompt();
+        return;
+      }
+      if (data === "\u001b[A") {
+        historyMove(-1);
+        return;
+      }
+      if (data === "\u001b[B") {
+        historyMove(1);
         return;
       }
       if (data === "\u007f") {

@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import sqlite3
 import subprocess
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,8 @@ OPENCODE_USERNAME = os.environ.get("OPENCODE_SERVER_USERNAME", "")
 OPENCODE_PASSWORD = os.environ.get("OPENCODE_SERVER_PASSWORD", "")
 LANES = ("later", "next", "now")
 ACTIVE_RUNS: set[str] = set()
+TERMINAL_PROCESS: subprocess.Popen[str] | None = None
+TERMINAL_PROCESS_LOCK = threading.Lock()
 
 
 def _auth_file_paths() -> list[Path]:
@@ -84,6 +88,16 @@ class WorkspaceFileUpdateRequest(BaseModel):
 
 class TerminalCommandRequest(BaseModel):
     command: str
+
+
+def _normalize_terminal_command(command: str) -> tuple[str, str | None]:
+    stripped = command.strip()
+    if stripped == "gh auth login":
+        return (
+            "gh auth login --hostname github.com --web --git-protocol https --skip-ssh-key",
+            "Using browser-based non-interactive GitHub auth flow for terminal panel.",
+        )
+    return command, None
 
 
 class PromptStartRequest(BaseModel):
@@ -735,20 +749,78 @@ async def workspace_file_update_internal(
 
 @app.post("/terminal/run")
 async def terminal_run_internal(payload: TerminalCommandRequest) -> dict[str, Any]:
-    completed = subprocess.run(
-        ["bash", "-lc", payload.command],
-        cwd=WORKSPACE_DIR,
-        env={**os.environ, "TERM": os.environ.get("TERM", "xterm-256color")},
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    command, note = _normalize_terminal_command(payload.command)
+
+    def run() -> subprocess.CompletedProcess[str]:
+        global TERMINAL_PROCESS
+        with TERMINAL_PROCESS_LOCK:
+            if TERMINAL_PROCESS and TERMINAL_PROCESS.poll() is None:
+                raise RuntimeError("Another terminal command is already running")
+            TERMINAL_PROCESS = subprocess.Popen(
+                ["bash", "-lc", command],
+                cwd=WORKSPACE_DIR,
+                env={**os.environ, "TERM": os.environ.get("TERM", "xterm-256color")},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+            proc = TERMINAL_PROCESS
+
+        assert proc is not None
+        try:
+            stdout, stderr = proc.communicate(timeout=300)
+            return subprocess.CompletedProcess(
+                args=["bash", "-lc", command],
+                returncode=proc.returncode,
+                stdout=stdout,
+                stderr=stderr,
+            )
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = proc.communicate()
+            return subprocess.CompletedProcess(
+                args=["bash", "-lc", command],
+                returncode=124,
+                stdout=stdout,
+                stderr=(stderr + "\nCommand timed out after 300 seconds").strip(),
+            )
+        finally:
+            with TERMINAL_PROCESS_LOCK:
+                if TERMINAL_PROCESS is proc:
+                    TERMINAL_PROCESS = None
+
+    try:
+        completed = await asyncio.to_thread(run)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    stdout = completed.stdout
+    if note:
+        stdout = f"{note}\n{stdout}" if stdout else f"{note}\n"
+
     return {
-        "command": payload.command,
-        "stdout": completed.stdout,
+        "command": command,
+        "stdout": stdout,
         "stderr": completed.stderr,
         "exitCode": completed.returncode,
     }
+
+
+@app.post("/terminal/interrupt")
+async def terminal_interrupt_internal() -> dict[str, Any]:
+    with TERMINAL_PROCESS_LOCK:
+        proc = TERMINAL_PROCESS
+    if not proc or proc.poll() is not None:
+        return {"ok": True, "signaled": False}
+    try:
+        os.killpg(proc.pid, signal.SIGINT)
+    except ProcessLookupError:
+        return {"ok": True, "signaled": False}
+    return {"ok": True, "signaled": True}
 
 
 app.mount("/mcp-root", mcp.streamable_http_app())

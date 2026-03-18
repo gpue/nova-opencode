@@ -148,3 +148,9 @@ export function runTerminalCommand(command: string): Promise<TerminalResult> {
     body: JSON.stringify({ command }),
   });
 }
+
+export function interruptTerminalCommand(): Promise<{ ok: boolean; signaled: boolean }> {
+  return request("/internal/terminal/interrupt", {
+    method: "POST",
+  });
+}
