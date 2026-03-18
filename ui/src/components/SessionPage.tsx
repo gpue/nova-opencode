@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getComposerOptions, getSessionDetail, sendMessage } from "../lib/api";
-import type { AgentMode, ComposerOptions, PromptOptions, SessionDetail } from "../lib/types";
+import type { AgentMode, ComposerOptions, PromptOptions, ProviderModelOption, SessionDetail } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
 import { Icon } from "./Icon";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -79,6 +79,35 @@ export function SessionPage() {
     [modelID, options, providerID],
   );
 
+  const groupedModels = useMemo(() => {
+    const groups = new Map<string, ProviderModelOption[]>();
+    for (const item of options?.models ?? []) {
+      const existing = groups.get(item.providerID);
+      if (existing) {
+        existing.push(item);
+      } else {
+        groups.set(item.providerID, [item]);
+      }
+    }
+    return Array.from(groups.entries()).map(([provider, models]) => ({ provider, models }));
+  }, [options]);
+
+  const selectedModelValue = providerID && modelID ? `${providerID}::${modelID}` : "";
+
+  useEffect(() => {
+    if (!options?.models.length) return;
+    const hasSelection = options.models.some((item) => item.providerID === providerID && item.modelID === modelID);
+    if (hasSelection) return;
+    if (options.defaultModel) {
+      setProviderID(options.defaultModel.providerID);
+      setModelID(options.defaultModel.modelID);
+      return;
+    }
+    const [first] = options.models;
+    setProviderID(first.providerID);
+    setModelID(first.modelID);
+  }, [modelID, options, providerID]);
+
   const latestAssistant = useMemo(() => {
     const messages = detail?.messages ?? [];
     return [...messages].reverse().find((message) => (message.info?.role || message.role) === "assistant") ?? null;
@@ -152,11 +181,23 @@ export function SessionPage() {
               <div className="session-controls">
                 <label>
                   <span>Model</span>
-                  <select value={modelID} onChange={(event) => setModelID(event.target.value)}>
-                    {(options?.models || []).map((item) => (
-                      <option key={`${item.providerID}:${item.modelID}`} value={item.modelID}>
-                        {item.name}
-                      </option>
+                  <select
+                    value={selectedModelValue}
+                    onChange={(event) => {
+                      const [nextProviderID, nextModelID] = event.target.value.split("::");
+                      if (!nextProviderID || !nextModelID) return;
+                      setProviderID(nextProviderID);
+                      setModelID(nextModelID);
+                    }}
+                  >
+                    {groupedModels.map((group) => (
+                      <optgroup key={group.provider} label={group.provider}>
+                        {group.models.map((item) => (
+                          <option key={`${item.providerID}:${item.modelID}`} value={`${item.providerID}::${item.modelID}`}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </label>
