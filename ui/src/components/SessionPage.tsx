@@ -187,11 +187,6 @@ export function SessionPage() {
             <Icon name="folder" width="14" height="14" />
             <span>Workspace</span>
           </button>
-          {detail?.running || waitingForInput ? (
-            <button className="archive-pill" type="button" onClick={() => void handleStop()} disabled={stopping} title="Stop processing">
-              <span>{stopping ? "Stopping..." : "Stop"}</span>
-            </button>
-          ) : null}
           <div className={`session-progress${detail?.running ? " running" : ""}`}>
             {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
           </div>
@@ -204,7 +199,7 @@ export function SessionPage() {
           <div className="session-main">
             <div className="session-timeline" ref={timelineRef}>
               {detail.messages.map((message) => (
-                <ConversationMessage key={message.id} message={message} onAnswer={handleAnswer} onStop={handleStop} busy={sending || stopping} />
+                <ConversationMessage key={message.id} message={message} onAnswer={handleAnswer} busy={sending || stopping} />
               ))}
               {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
             </div>
@@ -257,10 +252,17 @@ export function SessionPage() {
               />
               <div className="session-composer-actions">
                 <span className="session-composer-hint">Enter sends. Shift+Enter adds a newline.</span>
-                <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim() || !providerID || !modelID} title="Send prompt">
-                  <Icon name="open" width="14" height="14" />
-                  <span>{sending ? "Sending..." : "Send"}</span>
-                </button>
+                <div className="session-composer-buttons">
+                  {(detail?.running || waitingForInput) ? (
+                    <button className="archive-pill" type="button" onClick={() => void handleStop()} disabled={stopping} title="Stop processing">
+                      <span>{stopping ? "Stopping..." : "Stop"}</span>
+                    </button>
+                  ) : null}
+                  <button className="lane-new-button" type="submit" disabled={sending || !prompt.trim() || !providerID || !modelID} title="Send prompt">
+                    <Icon name="open" width="14" height="14" />
+                    <span>{sending ? "Sending..." : "Send"}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

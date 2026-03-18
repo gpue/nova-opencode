@@ -4,7 +4,7 @@
 #   - OpenCode web UI (port 4096, internal) for browser-based AI coding
 #   - MCP bridge server (port 8081, internal) for programmatic agent access
 #   - Caddy reverse proxy (port 8080, exposed) routing BASE_PATH prefix
-#   - git, Python 3, Nova CLI pre-installed in the workspace
+#   - git, Python 3, Nova CLI, ssh, ping, nc, dig, traceroute pre-installed
 # ------------------------------------------------------------------
 
 # ── Stage 1: Build custom Caddy with replace-response module ───────
@@ -37,9 +37,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# ── System packages + Python 3 + git ───────────────────────────────
+# ── System packages + Python 3 + git + network tools ───────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gh gnupg git python3 python3-pip python3-venv xdg-utils \
+        openssh-client netcat-openbsd iputils-ping dnsutils traceroute \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Install OpenCode binary from GitHub Releases ───────────────────

@@ -6,25 +6,52 @@ function extractText(value: unknown): string {
   if (Array.isArray(value)) return value.map((item) => extractText(item)).filter(Boolean).join("\n").trim();
   if (!value || typeof value !== "object") return "";
   const record = value as Record<string, unknown>;
-  for (const key of ["text", "question", "prompt", "summary", "message", "content", "title", "reasoning"]) {
-    const text = extractText(record[key]);
+  for (const key of [
+    "text",
+    "question",
+    "prompt",
+    "input",
+    "summary",
+    "message",
+    "content",
+    "title",
+    "reasoning",
+    "arguments",
+    "args",
+  ]) {
+    const v = record[key];
+    if (v === undefined) continue;
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const inner = extractText((v as Record<string, unknown>).question ?? (v as Record<string, unknown>).text ?? (v as Record<string, unknown>).content);
+      if (inner) return inner;
+    }
+    const text = extractText(v);
     if (text) return text;
   }
   return "";
 }
 
-function extractQuestions(detail: string): string[] {
+function extractSuggestedOptions(part: Record<string, unknown>): string[] {
+  for (const key of ["options", "suggestions", "choices"]) {
+    const arr = part[key];
+    if (!Array.isArray(arr)) continue;
+    const items = arr
+      .map((item) => (typeof item === "string" ? item : (item as Record<string, unknown>)?.label ?? (item as Record<string, unknown>)?.value ?? (item as Record<string, unknown>)?.text))
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+    if (items.length) return items;
+  }
+  return [];
+}
+
+function formatQuestionDisplay(detail: string): string[] {
   const lines = detail
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-
   const questions = lines.filter((line) => /\?\s*$/.test(line) || /^question\b/i.test(line) || /^q\d*\b/i.test(line));
   if (questions.length) return questions;
-
-  // Fallback: if we have a short single line, treat it as the question.
-  if (lines.length === 1 && lines[0].length <= 220) return [lines[0]];
-  return [];
+  if (lines.length === 1 && lines[0].length <= 400) return [lines[0]];
+  return lines.length ? lines : [];
 }
 
 function extractRenderableText(message: SessionMessage): string {
@@ -40,12 +67,10 @@ function extractRenderableText(message: SessionMessage): string {
 export function ConversationMessage({
   message,
   onAnswer,
-  onStop,
   busy = false,
 }: {
   message: SessionMessage;
   onAnswer?: (answer: string) => void | Promise<void>;
-  onStop?: () => void | Promise<void>;
   busy?: boolean;
 }) {
   const text = extractRenderableText(message) || "No text content available.";
@@ -76,7 +101,8 @@ export function ConversationMessage({
         const detail = extractText(part);
         const isWaiting = status === "running";
         const draft = draftAnswers[index] ?? "";
-        const questions = isWaiting && detail ? extractQuestions(detail) : [];
+        const questionLines = detail ? formatQuestionDisplay(detail) : [];
+        const suggestedOptions = extractSuggestedOptions(part as Record<string, unknown>);
 
         return (
           <section key={`${message.id}-tool-${index}`} className="conversation-part conversation-tool">
@@ -84,10 +110,10 @@ export function ConversationMessage({
               <div className="conversation-part-label">{`Step ${index + 1}: ${label}`}</div>
               <span className={`conversation-tool-status ${status}`}>{status === "running" ? "Waiting for input" : status}</span>
             </div>
-            {questions.length ? (
+            {questionLines.length ? (
               <ol className="conversation-tool-questions">
-                {questions.map((question, questionIndex) => (
-                  <li key={`${message.id}-tool-${index}-q-${questionIndex}`}>{question}</li>
+                {questionLines.map((line, i) => (
+                  <li key={`${message.id}-tool-${index}-q-${i}`}>{line}</li>
                 ))}
               </ol>
             ) : detail ? (
@@ -102,12 +128,24 @@ export function ConversationMessage({
                   placeholder="Answer this question…"
                   rows={3}
                 />
+                {suggestedOptions.length ? (
+                  <div className="conversation-tool-suggestions">
+                    {suggestedOptions.map((opt, i) => (
+                      <button
+                        key={`${message.id}-tool-${index}-opt-${i}`}
+                        className="archive-pill"
+                        type="button"
+                        onClick={() => {
+                          setDraftAnswers((current) => ({ ...current, [index]: opt }));
+                        }}
+                        disabled={busy}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="conversation-tool-buttons">
-                  {onStop ? (
-                    <button className="archive-pill" type="button" onClick={() => void onStop()} disabled={busy} title="Stop processing">
-                      Stop
-                    </button>
-                  ) : null}
                   <button
                     className="archive-pill primary-action"
                     type="button"

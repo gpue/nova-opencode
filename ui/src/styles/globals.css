@@ -239,6 +239,7 @@ button, textarea, input, select { font: inherit; }
   outline: none;
 }
 .conversation-tool-input:focus { border-color: rgba(142, 86, 252, 0.45); }
+.conversation-tool-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
 .conversation-tool-buttons { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .session-composer { margin-top: 20px; padding: 18px; background: rgba(17, 19, 31, 0.9); border: 1px solid var(--border-subtle); border-radius: 18px; }
 .session-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
@@ -249,6 +250,7 @@ button, textarea, input, select { font: inherit; }
 .session-composer textarea { width: 100%; resize: vertical; min-height: 120px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-paper-2); color: var(--text-primary); padding: 14px; outline: none; }
 .session-composer textarea:focus, .terminal-form input:focus { border-color: rgba(142, 86, 252, 0.45); }
 .session-composer-hint { color: var(--text-disabled); font-size: 0.8rem; }
+.session-composer-buttons { display: flex; align-items: center; gap: 10px; }
 
 .provider-overlay {
   position: fixed; inset: 0; pointer-events: none; z-index: 50;
