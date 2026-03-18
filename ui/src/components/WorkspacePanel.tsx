@@ -90,7 +90,9 @@ export function WorkspacePanel({ open, onClose, mode = "inline" }: WorkspacePane
   const [treeWidth, setTreeWidth] = useState(250);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const panelResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const treeResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -172,6 +174,34 @@ export function WorkspacePanel({ open, onClose, mode = "inline" }: WorkspacePane
     }
   }
 
+  function getUploadTargetDir(): string {
+    if (!selectedPath) return "";
+    const lastSlash = selectedPath.lastIndexOf("/");
+    return lastSlash >= 0 ? selectedPath.slice(0, lastSlash + 1) : "";
+  }
+
+  async function handleUpload(files: FileList | null) {
+    if (!files?.length) return;
+    setUploading(true);
+    setError(null);
+    const targetDir = getUploadTargetDir();
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const content = await file.text();
+        const path = targetDir ? `${targetDir}${file.name}` : file.name;
+        await saveWorkspaceFile(path, content);
+      }
+      const { tree: newTree } = await getWorkspaceTree();
+      setTree(newTree);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload file(s)");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   const resolvedLanguage = language === "auto" ? detectLanguage(selectedPath) : language;
 
   function startPanelResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -211,10 +241,32 @@ export function WorkspacePanel({ open, onClose, mode = "inline" }: WorkspacePane
       </div>
       {error ? <div className="page-state error">{error}</div> : null}
       <div className="workspace-panel-body" style={{ gridTemplateColumns: `${treeWidth}px 10px minmax(0, 1fr)` }}>
-        <div className="workspace-tree">
-          {tree.map((node) => (
+        <div className="workspace-tree-wrap">
+          <div className="workspace-tree-toolbar">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="workspace-upload-input"
+              onChange={(e) => handleUpload(e.target.files)}
+              aria-label="Upload files"
+            />
+            <button
+              className="archive-pill"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Upload files to workspace"
+            >
+              <Icon name="upload" width="14" height="14" />
+              <span>{uploading ? "Uploading..." : "Upload"}</span>
+            </button>
+          </div>
+          <div className="workspace-tree">
+            {tree.map((node) => (
             <TreeNode key={node.path} node={node} selectedPath={selectedPath} onSelect={setSelectedPath} />
           ))}
+          </div>
         </div>
         <button className="workspace-resize-handle workspace-splitter" type="button" aria-label="Resize explorer" onPointerDown={startTreeResize} />
         <div className="workspace-editor-wrap">

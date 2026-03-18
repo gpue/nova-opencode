@@ -739,10 +739,9 @@ async def workspace_file_update_internal(
     payload: WorkspaceFileUpdateRequest,
 ) -> dict[str, Any]:
     file_path = _workspace_path(payload.path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    if not file_path.is_file():
+    if file_path.exists() and not file_path.is_file():
         raise HTTPException(status_code=400, detail="Path is not a file")
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(payload.content)
     return {"ok": True}
 
@@ -798,14 +797,15 @@ async def terminal_run_internal(payload: TerminalCommandRequest) -> dict[str, An
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    stdout = completed.stdout
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
     if note:
         stdout = f"{note}\n{stdout}" if stdout else f"{note}\n"
 
     return {
         "command": command,
         "stdout": stdout,
-        "stderr": completed.stderr,
+        "stderr": stderr,
         "exitCode": completed.returncode,
     }
 

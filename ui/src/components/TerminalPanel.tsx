@@ -56,19 +56,22 @@ export function TerminalPanel({ open, onClose }: TerminalPanelProps) {
   function writeResult(result: TerminalResult) {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    const hasOutput = Boolean(result.stdout || result.stderr);
-    if (result.stdout) {
-      terminal.write(result.stdout.replace(/\n/g, "\r\n"));
-      if (!result.stdout.endsWith("\n")) terminal.write("\r\n");
+    const stdout = typeof result.stdout === "string" ? result.stdout : "";
+    const stderr = typeof result.stderr === "string" ? result.stderr : "";
+    const exitCode = typeof result.exitCode === "number" ? result.exitCode : -1;
+    const hasOutput = stdout.length > 0 || stderr.length > 0;
+    if (stdout) {
+      terminal.write(stdout);
+      if (!stdout.endsWith("\n")) terminal.write("\r\n");
     }
-    if (result.stderr) {
-      terminal.write(`\x1b[31m${result.stderr.replace(/\n/g, "\r\n")}\x1b[0m`);
-      if (!result.stderr.endsWith("\n")) terminal.write("\r\n");
+    if (stderr) {
+      terminal.write(`\x1b[31m${stderr}\x1b[0m`);
+      if (!stderr.endsWith("\n")) terminal.write("\r\n");
     }
     if (!hasOutput) {
       terminal.writeln("\x1b[90m(no output)\x1b[0m");
     }
-    terminal.writeln(`\x1b[90mexit ${result.exitCode}\x1b[0m`);
+    terminal.writeln(`\x1b[90mexit ${exitCode}\x1b[0m`);
     prompt();
   }
 

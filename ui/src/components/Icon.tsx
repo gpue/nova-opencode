@@ -1,6 +1,6 @@
 import type { ReactElement, SVGProps } from "react";
 
-type IconName = "archive" | "close" | "copy" | "folder" | "link" | "new" | "open" | "save" | "terminal";
+type IconName = "archive" | "close" | "copy" | "folder" | "link" | "new" | "open" | "save" | "terminal" | "upload";
 
 const paths: Record<IconName, ReactElement> = {
   archive: (
@@ -58,6 +58,13 @@ const paths: Record<IconName, ReactElement> = {
     <>
       <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5" />
       <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 1 0 7.07 7.07L14 19" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <path d="M12 3v12" />
     </>
   ),
 };

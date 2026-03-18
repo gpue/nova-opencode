@@ -31,6 +31,36 @@ function extractText(value: unknown): string {
   return "";
 }
 
+function extractToolCommand(part: Record<string, unknown>): string {
+  const topLevel = part.command ?? part.cmd;
+  if (typeof topLevel === "string" && topLevel.trim()) return topLevel.trim();
+  const input = part.input ?? part.arguments ?? part.args;
+  if (typeof input === "string") return input.trim();
+  if (input && typeof input === "object") {
+    const obj = input as Record<string, unknown>;
+    const cmd = obj.command ?? obj.cmd ?? obj.query ?? obj.text;
+    if (typeof cmd === "string") return cmd.trim();
+    if (Array.isArray(obj.args)) return (obj.args as unknown[]).map(String).join(" ").trim();
+  }
+  return "";
+}
+
+function extractToolOutput(part: Record<string, unknown>): string {
+  const result = part.result ?? part.output ?? part.content;
+  if (typeof result === "string") return result.trim();
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+    const stdout = obj.stdout;
+    const stderr = obj.stderr;
+    const out = typeof stdout === "string" ? stdout : "";
+    const err = typeof stderr === "string" ? stderr : "";
+    if (out || err) return [out, err].filter(Boolean).join(err ? "\n" : "").trim();
+    const text = obj.text ?? obj.content ?? obj.output;
+    if (typeof text === "string") return text.trim();
+  }
+  return "";
+}
+
 function extractSuggestedOptions(part: Record<string, unknown>): string[] {
   for (const key of ["options", "suggestions", "choices"]) {
     const arr = part[key];
@@ -68,15 +98,22 @@ export function ConversationMessage({
   message,
   onAnswer,
   busy = false,
+  isPending = false,
 }: {
   message: SessionMessage;
   onAnswer?: (answer: string) => void | Promise<void>;
   busy?: boolean;
+  isPending?: boolean;
 }) {
-  const text = extractRenderableText(message) || "No text content available.";
+  const rawText = extractRenderableText(message);
+  const text = rawText || "No text content available.";
+  const hasNoContent = !rawText || rawText.trim().length === 0;
   const role = message.info?.role || message.role || "system";
   const createdAt = (message as { info?: { time?: { created?: number } } }).info?.time?.created;
   const parts = Array.isArray(message.parts) ? message.parts : [];
+  const hasWaitingTool = parts.some((p) => (p as { state?: { status?: string } }).state?.status === "running");
+  const showPendingStrip =
+    isPending && hasNoContent && role === "assistant" && !hasWaitingTool;
   const reasoningParts = parts.filter((part) => part.type === "reasoning").map((part) => extractText(part)).filter(Boolean);
   const toolParts = parts.filter((part) => part.type === "tool");
   const [draftAnswers, setDraftAnswers] = useState<Record<number, string>>({});
@@ -88,13 +125,20 @@ export function ConversationMessage({
         <span className="conversation-message-role">{role}</span>
         <span className="conversation-message-time">{createdAt ? new Date(createdAt).toLocaleString() : ""}</span>
       </div>
-      <pre className="conversation-message-body">{text}</pre>
-      {reasoningParts.map((reasoning, index) => (
-        <section key={`${message.id}-reasoning-${index}`} className="conversation-part conversation-reasoning">
-          <div className="conversation-part-label">Reasoning</div>
-          <pre className="conversation-part-body">{reasoning}</pre>
-        </section>
-      ))}
+      {showPendingStrip ? (
+        <div className="conversation-message-progress" aria-label="Generating response">
+          <div className="conversation-message-progress-bar" />
+        </div>
+      ) : (
+        <pre className="conversation-message-body">{text}</pre>
+      )}
+      {!showPendingStrip &&
+        reasoningParts.map((reasoning, index) => (
+          <section key={`${message.id}-reasoning-${index}`} className="conversation-part conversation-reasoning">
+            <div className="conversation-part-label">Reasoning</div>
+            <pre className="conversation-part-body">{reasoning}</pre>
+          </section>
+        ))}
       {toolParts.map((part, index) => {
         const state = (part as { state?: { status?: string } }).state;
         const status = state?.status || "complete";
@@ -106,6 +150,11 @@ export function ConversationMessage({
         const draft = draftAnswers[index] ?? "";
         const questionLines = detail ? formatQuestionDisplay(detail) : [];
         const suggestedOptions = extractSuggestedOptions(part as Record<string, unknown>);
+        const partRecord = part as Record<string, unknown>;
+        const toolCommand = extractToolCommand(partRecord);
+        let toolOutput = extractToolOutput(partRecord);
+        if (!toolOutput && toolCommand && detail && !questionLines.length) toolOutput = detail;
+        const showCommandOutput = (toolCommand || toolOutput) && (status === "complete" || status === "running");
 
         return (
           <section key={`${message.id}-tool-${index}`} className="conversation-part conversation-tool">
@@ -119,7 +168,20 @@ export function ConversationMessage({
                   <li key={`${message.id}-tool-${index}-q-${i}`}>{line}</li>
                 ))}
               </ol>
-            ) : detail ? (
+            ) : null}
+            {showCommandOutput ? (
+              <div className="conversation-tool-exec">
+                {toolCommand ? (
+                  <div className="conversation-tool-command">
+                    <span className="conversation-tool-prompt">$</span> {toolCommand}
+                  </div>
+                ) : null}
+                {toolOutput ? (
+                  <pre className="conversation-tool-output">{toolOutput}</pre>
+                ) : null}
+              </div>
+            ) : null}
+            {!showCommandOutput && detail && !questionLines.length ? (
               <pre className="conversation-part-body">{detail}</pre>
             ) : null}
             {showForm ? (

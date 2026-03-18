@@ -4,6 +4,7 @@ import { getComposerOptions, getSessionDetail, sendMessage, stopSession } from "
 import type { AgentMode, ComposerOptions, PromptOptions, ProviderModelOption, SessionDetail } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
 import { Icon } from "./Icon";
+import { TerminalPanel } from "./TerminalPanel";
 import { WorkspacePanel } from "./WorkspacePanel";
 
 export function SessionPage() {
@@ -19,6 +20,7 @@ export function SessionPage() {
   const [variant, setVariant] = useState("medium");
   const [mode, setMode] = useState<AgentMode>("plan");
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
@@ -187,6 +189,10 @@ export function SessionPage() {
             <Icon name="folder" width="14" height="14" />
             <span>Workspace</span>
           </button>
+          <button className={`archive-pill${terminalOpen ? " active" : ""}`} type="button" onClick={() => setTerminalOpen((current) => !current)} title="Toggle terminal overlay">
+            <Icon name="terminal" width="14" height="14" />
+            <span>Terminal</span>
+          </button>
           <div className={`session-progress${detail?.running ? " running" : ""}`}>
             {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
           </div>
@@ -199,7 +205,13 @@ export function SessionPage() {
           <div className="session-main">
             <div className="session-timeline" ref={timelineRef}>
               {detail.messages.map((message) => (
-                <ConversationMessage key={message.id} message={message} onAnswer={handleAnswer} busy={sending || stopping} />
+                <ConversationMessage
+                  key={message.id}
+                  message={message}
+                  onAnswer={handleAnswer}
+                  busy={sending || stopping}
+                  isPending={detail.running && latestAssistant?.id === message.id}
+                />
               ))}
               {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
             </div>
@@ -267,6 +279,7 @@ export function SessionPage() {
             </form>
           </div>
           <WorkspacePanel open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} mode="overlay" />
+          <TerminalPanel open={terminalOpen} onClose={() => setTerminalOpen(false)} />
         </div>
       ) : null}
     </section>
