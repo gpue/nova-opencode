@@ -103,6 +103,13 @@ export function startProviderOAuth(providerID: string, method: number): Promise<
   });
 }
 
+export function completeProviderOAuth(providerID: string, method: number, code?: string): Promise<boolean> {
+  return request(`/api/provider/${providerID}/oauth/callback`, {
+    method: "POST",
+    body: JSON.stringify({ method, ...(code ? { code } : {}) }),
+  });
+}
+
 export function disconnectProvider(providerID: string): Promise<boolean> {
   return request(`/api/auth/${providerID}`, { method: "DELETE" });
 }

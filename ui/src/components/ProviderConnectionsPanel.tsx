@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  completeProviderOAuth,
   disconnectProvider,
   getProviderAuthMethods,
   getProviderConnections,
@@ -15,6 +16,7 @@ interface ProviderConnectionsPanelProps {
 
 interface PendingAuthorization {
   providerID: string;
+  method: number;
   title: string;
   url: string;
   instructions: string;
@@ -124,6 +126,7 @@ export function ProviderConnectionsPanel({ open, onClose }: ProviderConnectionsP
       const authorization = await startProviderOAuth(providerID, method);
       setPending({
         providerID,
+        method,
         title,
         url: authorization.url,
         instructions: authorization.instructions,
@@ -132,6 +135,16 @@ export function ProviderConnectionsPanel({ open, onClose }: ProviderConnectionsP
       setCopied(false);
       setError(null);
       window.open(authorization.url, "_blank", "noopener,noreferrer");
+
+      if (authorization.method === "auto") {
+        void completeProviderOAuth(providerID, method)
+          .then(async () => {
+            await refreshState();
+          })
+          .catch((err) => {
+            setError(err instanceof Error ? err.message : `Failed to complete ${title} OAuth`);
+          });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to start ${title} OAuth`);
     } finally {
