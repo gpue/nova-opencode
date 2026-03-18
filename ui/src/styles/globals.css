@@ -250,6 +250,7 @@ button, textarea, input, select { font: inherit; }
 .session-composer textarea { width: 100%; resize: vertical; min-height: 120px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-paper-2); color: var(--text-primary); padding: 14px; outline: none; }
 .session-composer textarea:focus, .terminal-form input:focus { border-color: rgba(142, 86, 252, 0.45); }
 .session-composer-hint { color: var(--text-disabled); font-size: 0.8rem; }
+.session-composer .session-composer-actions { margin-top: 14px; }
 .session-composer-buttons { display: flex; align-items: center; gap: 10px; }
 
 .provider-overlay {

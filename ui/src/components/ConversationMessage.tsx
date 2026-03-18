@@ -80,6 +80,7 @@ export function ConversationMessage({
   const reasoningParts = parts.filter((part) => part.type === "reasoning").map((part) => extractText(part)).filter(Boolean);
   const toolParts = parts.filter((part) => part.type === "tool");
   const [draftAnswers, setDraftAnswers] = useState<Record<number, string>>({});
+  const [submittedIndices, setSubmittedIndices] = useState<Set<number>>(new Set());
 
   return (
     <article className={`conversation-message ${role}`}>
@@ -100,6 +101,8 @@ export function ConversationMessage({
         const label = extractText((part as { tool?: unknown; name?: unknown }).tool) || extractText((part as { name?: unknown }).name) || "Tool";
         const detail = extractText(part);
         const isWaiting = status === "running";
+        const wasSubmitted = submittedIndices.has(index);
+        const showForm = isWaiting && !wasSubmitted;
         const draft = draftAnswers[index] ?? "";
         const questionLines = detail ? formatQuestionDisplay(detail) : [];
         const suggestedOptions = extractSuggestedOptions(part as Record<string, unknown>);
@@ -119,7 +122,7 @@ export function ConversationMessage({
             ) : detail ? (
               <pre className="conversation-part-body">{detail}</pre>
             ) : null}
-            {isWaiting ? (
+            {showForm ? (
               <div className="conversation-tool-actions">
                 <textarea
                   className="conversation-tool-input"
@@ -152,6 +155,7 @@ export function ConversationMessage({
                     onClick={() => {
                       const answer = draft.trim();
                       if (!answer || !onAnswer) return;
+                      setSubmittedIndices((prev) => new Set(prev).add(index));
                       setDraftAnswers((current) => ({ ...current, [index]: "" }));
                       void onAnswer(answer);
                     }}
