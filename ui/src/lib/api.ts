@@ -127,6 +127,14 @@ export function sendMessage(sessionId: string, prompt: string, options: PromptOp
   });
 }
 
+export async function stopSession(sessionId: string): Promise<{ ok: boolean }> {
+  try {
+    return await request(`/internal/session/${sessionId}/interrupt`, { method: "POST" });
+  } catch {
+    return await request(`/internal/session/${sessionId}/cancel`, { method: "POST" });
+  }
+}
+
 export function getWorkspaceTree(): Promise<{ tree: WorkspaceNode[] }> {
   return request("/internal/workspace/tree");
 }

@@ -227,7 +227,7 @@ export function ProviderConnectionsPanel({ open, onClose }: ProviderConnectionsP
                   <h3>{card.title}</h3>
                   <p>{card.description}</p>
                 </div>
-                <span className={`session-progress${card.connected ? " running" : ""}`}>{card.connected ? "Connected" : "Not connected"}</span>
+                <span className={`session-progress${card.connected ? " connected" : ""}`}>{card.connected ? "Connected" : "Not connected"}</span>
               </div>
               <div className="provider-card-actions">
                 {card.connected ? (

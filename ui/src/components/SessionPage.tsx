@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getComposerOptions, getSessionDetail, sendMessage } from "../lib/api";
+import { getComposerOptions, getSessionDetail, sendMessage, stopSession } from "../lib/api";
 import type { AgentMode, ComposerOptions, PromptOptions, ProviderModelOption, SessionDetail } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
 import { Icon } from "./Icon";
@@ -19,6 +19,7 @@ export function SessionPage() {
   const [variant, setVariant] = useState("medium");
   const [mode, setMode] = useState<AgentMode>("plan");
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const timelineRef = useRef<HTMLDivElement | null>(null);
 
   function scrollTimelineToBottom() {
@@ -138,6 +139,35 @@ export function SessionPage() {
     }
   }
 
+  async function handleAnswer(answer: string) {
+    if (!sessionId || !answer.trim() || !providerID || !modelID) return;
+    setSending(true);
+    try {
+      const payload: PromptOptions = { providerID, modelID, variant, mode };
+      await sendMessage(sessionId, answer.trim(), payload);
+      scrollTimelineToBottom();
+      const refreshed = await getSessionDetail(sessionId);
+      setDetail(refreshed);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleStop() {
+    if (!sessionId || stopping) return;
+    setStopping(true);
+    try {
+      await stopSession(sessionId);
+      const refreshed = await getSessionDetail(sessionId);
+      setDetail(refreshed);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to stop processing");
+    } finally {
+      setStopping(false);
+    }
+  }
+
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
@@ -153,14 +183,15 @@ export function SessionPage() {
           <p>{detail?.updatedAt ? `Updated ${new Date(detail.updatedAt).toLocaleString()}` : "Live OpenCode session"}</p>
         </div>
         <div className="session-header-actions">
-          <button className="archive-pill primary-action" type="button" onClick={() => window.dispatchEvent(new CustomEvent("nova:open-connections"))} title="Connect GitHub Copilot or OpenAI Codex">
-            <Icon name="link" width="14" height="14" />
-            <span>Connect AI</span>
-          </button>
           <button className={`archive-pill${workspaceOpen ? " active" : ""}`} type="button" onClick={() => setWorkspaceOpen((current) => !current)} title="Open workspace panel">
             <Icon name="folder" width="14" height="14" />
             <span>Workspace</span>
           </button>
+          {detail?.running || waitingForInput ? (
+            <button className="archive-pill" type="button" onClick={() => void handleStop()} disabled={stopping} title="Stop processing">
+              <span>{stopping ? "Stopping..." : "Stop"}</span>
+            </button>
+          ) : null}
           <div className={`session-progress${detail?.running ? " running" : ""}`}>
             {waitingForInput ? "Waiting for input" : detail?.running ? "Thinking..." : "Idle"}
           </div>
@@ -173,7 +204,7 @@ export function SessionPage() {
           <div className="session-main">
             <div className="session-timeline" ref={timelineRef}>
               {detail.messages.map((message) => (
-                <ConversationMessage key={message.id} message={message} />
+                <ConversationMessage key={message.id} message={message} onAnswer={handleAnswer} onStop={handleStop} busy={sending || stopping} />
               ))}
               {detail.messages.length === 0 ? <div className="lane-empty">No messages yet. Send the first prompt.</div> : null}
             </div>
