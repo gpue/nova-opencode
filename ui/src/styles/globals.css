@@ -231,6 +231,7 @@ button, textarea, input, select { font: inherit; }
 @keyframes progressShimmer {
   0%, 100% { transform: translateX(-100%); }
   50% { transform: translateX(350%); }
+}
 .conversation-part { margin-top: 14px; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08); }
 .conversation-reasoning { background: rgba(148, 163, 184, 0.08); color: rgba(226, 232, 240, 0.72); }
 .conversation-tool { background: rgba(94, 234, 212, 0.06); }
