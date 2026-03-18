@@ -202,10 +202,12 @@ export function WorkspacePanel({ open, onClose, mode = "inline" }: WorkspacePane
           <h2>Workspace</h2>
           <p>Browse and edit files on the PVC.</p>
         </div>
-        <button className="panel-close-button" type="button" onClick={onClose} title="Close workspace">
-          <Icon name="close" width="14" height="14" />
-          <span>Close</span>
-        </button>
+        {mode === "inline" ? (
+          <button className="panel-close-button" type="button" onClick={onClose} title="Close workspace">
+            <Icon name="close" width="14" height="14" />
+            <span>Close</span>
+          </button>
+        ) : null}
       </div>
       {error ? <div className="page-state error">{error}</div> : null}
       <div className="workspace-panel-body" style={{ gridTemplateColumns: `${treeWidth}px 10px minmax(0, 1fr)` }}>

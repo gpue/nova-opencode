@@ -30,7 +30,7 @@ RUN npm run build
 FROM debian:bookworm-slim
 
 # ── Versions ────────────────────────────────────────────────────────
-ARG OPENCODE_VERSION=1.2.25
+ARG OPENCODE_VERSION=1.2.27
 ARG NOVA_CLI_VERSION=0.0.224
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -39,7 +39,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # ── System packages + Python 3 + git ───────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl gh gnupg git python3 python3-pip python3-venv \
+        ca-certificates curl gh gnupg git python3 python3-pip python3-venv xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Install OpenCode binary from GitHub Releases ───────────────────

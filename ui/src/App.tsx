@@ -17,7 +17,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Header onOpenConnections={() => setConnectionsOpen(true)} />
+      <Header />
       <main className="app-main">
         <Routes>
           <Route path="/" element={<BoardPage />} />

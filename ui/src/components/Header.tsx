@@ -1,7 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
-import { Icon } from "./Icon";
 
-export function Header({ onOpenConnections }: { onOpenConnections: () => void }) {
+export function Header() {
   return (
     <header className="nova-header">
       <div className="nova-header-left">
@@ -27,10 +26,6 @@ export function Header({ onOpenConnections }: { onOpenConnections: () => void })
             Archive
           </NavLink>
         </nav>
-        <button className="archive-pill primary-action" type="button" onClick={onOpenConnections} title="Connect GitHub Copilot or OpenAI Codex">
-          <Icon name="link" width="14" height="14" />
-          <span>Connect AI</span>
-        </button>
       </div>
     </header>
   );
