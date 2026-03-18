@@ -84,7 +84,7 @@ export function getComposerOptions(): Promise<ComposerOptions> {
 }
 
 export function getProviderConnections(): Promise<ProviderConnectionSummary> {
-  return request("/api/provider").then((payload) => {
+  return request("/internal/auth/providers").then((payload) => {
     const connected = Array.isArray((payload as { connected?: unknown }).connected)
       ? ((payload as { connected: unknown[] }).connected.filter((item): item is string => typeof item === "string"))
       : [];
