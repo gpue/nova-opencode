@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { DndContext, DragEndEvent, DragOverlay, PointerSensor, closestCorners, useSensor, useSensors } from "@dnd-kit/core";
 import { useNavigate } from "react-router-dom";
-import { archiveSession, createSession, getBoard, moveSession } from "../lib/api";
-import type { BoardData, Lane, SessionSummary } from "../lib/types";
+import { archiveSession, createSession, getBoard, getEventsUrl, moveSession } from "../lib/api";
+import type { BoardData, Lane, SessionSummary, StreamEnvelope } from "../lib/types";
 import { LaneColumn } from "./LaneColumn";
 import { TerminalPanel } from "./TerminalPanel";
 import { TicketCard } from "./TicketCard";
@@ -46,7 +46,16 @@ export function BoardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let refreshPending = false;
+    let refreshInFlight = false;
+
     const refresh = () => {
+      if (refreshInFlight) {
+        refreshPending = true;
+        return;
+      }
+
+      refreshInFlight = true;
       getBoard()
         .then((data) => {
           if (!cancelled) {
@@ -58,14 +67,28 @@ export function BoardPage() {
           if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load board");
         })
         .finally(() => {
+          refreshInFlight = false;
           if (!cancelled) setLoading(false);
+          if (refreshPending && !cancelled) {
+            refreshPending = false;
+            window.setTimeout(refresh, 0);
+          }
         });
     };
 
     refresh();
     const interval = window.setInterval(refresh, 2500);
-    const stream = new EventSource(`/cell/nova-opencode/api/global/event`);
-    stream.onmessage = () => refresh();
+    const stream = new EventSource(getEventsUrl());
+    stream.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as StreamEnvelope;
+        if (!payload.event || payload.event.startsWith("session.")) {
+          refresh();
+        }
+      } catch {
+        refresh();
+      }
+    };
     stream.onerror = () => {};
 
     return () => {

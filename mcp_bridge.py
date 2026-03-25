@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
@@ -400,12 +401,14 @@ async def _fetch_messages(session_id: str, limit: int = 25) -> list[dict[str, An
 
 async def _fetch_session_detail(session_id: str) -> dict[str, Any]:
     async with _client() as client:
-        session_response = await client.get(f"/session/{session_id}")
+        session_response, messages_response = await asyncio.gather(
+            client.get(f"/session/{session_id}"),
+            client.get(f"/session/{session_id}/message"),
+        )
         session_response.raise_for_status()
-        session = session_response.json()
-
-        messages_response = await client.get(f"/session/{session_id}/message")
         messages_response.raise_for_status()
+
+        session = session_response.json()
         messages = messages_response.json()
         status = session.get("status")
         if isinstance(status, dict):
@@ -454,7 +457,9 @@ async def _build_session_summary(session: dict[str, Any]) -> dict[str, Any]:
 
 async def _board_payload() -> dict[str, Any]:
     sessions = await _fetch_sessions()
-    summaries = [await _build_session_summary(session) for session in sessions]
+    summaries = await asyncio.gather(
+        *(_build_session_summary(session) for session in sessions)
+    )
     lanes: dict[str, list[dict[str, Any]]] = {lane: [] for lane in LANES}
     archive: list[dict[str, Any]] = []
 
@@ -474,6 +479,103 @@ async def _board_payload() -> dict[str, Any]:
 
     archive.sort(key=sort_key)
     return {"lanes": lanes, "archiveCount": len(archive)}
+
+
+def _event_session_id(event: Any) -> str | None:
+    if not isinstance(event, dict):
+        return None
+
+    properties = event.get("properties")
+    if not isinstance(properties, dict):
+        return None
+
+    for key in ("sessionID", "sessionId"):
+        value = properties.get(key)
+        if isinstance(value, str) and value:
+            return value
+
+    info = properties.get("info")
+    if isinstance(info, dict):
+        info_session_id = info.get("sessionID") or info.get("sessionId")
+        if isinstance(info_session_id, str) and info_session_id:
+            return info_session_id
+        if str(event.get("type", "")).startswith("session."):
+            info_id = info.get("id")
+            if isinstance(info_id, str) and info_id:
+                return info_id
+
+    part = properties.get("part")
+    if isinstance(part, dict):
+        part_session_id = part.get("sessionID") or part.get("sessionId")
+        if isinstance(part_session_id, str) and part_session_id:
+            return part_session_id
+
+    tool = properties.get("tool")
+    if isinstance(tool, dict):
+        tool_session_id = tool.get("sessionID") or tool.get("sessionId")
+        if isinstance(tool_session_id, str) and tool_session_id:
+            return tool_session_id
+
+    return None
+
+
+def _format_sse_message(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+async def _relay_global_events(session_id: str | None):
+    headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+
+    async with _client() as client:
+        async with client.stream(
+            "GET", "/global/event", headers=headers, timeout=None
+        ) as response:
+            response.raise_for_status()
+
+            event_name = "message"
+            data_lines: list[str] = []
+
+            async for line in response.aiter_lines():
+                if line == "":
+                    if not data_lines:
+                        event_name = "message"
+                        continue
+
+                    raw_data = "\n".join(data_lines)
+                    try:
+                        parsed_data: Any = json.loads(raw_data)
+                    except json.JSONDecodeError:
+                        parsed_data = raw_data
+
+                    payload = {"event": event_name, "data": parsed_data}
+                    if (
+                        session_id is None
+                        or _event_session_id(parsed_data) == session_id
+                    ):
+                        yield _format_sse_message(payload)
+
+                    event_name = "message"
+                    data_lines = []
+                    continue
+
+                if line.startswith(":"):
+                    continue
+                if line.startswith("event:"):
+                    event_name = line[6:].strip() or "message"
+                    continue
+                if line.startswith("data:"):
+                    data_lines.append(line[5:].lstrip())
+
+            if data_lines:
+                raw_data = "\n".join(data_lines)
+                try:
+                    parsed_data = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    parsed_data = raw_data
+                if session_id is None or _event_session_id(parsed_data) == session_id:
+                    yield _format_sse_message(
+                        {"event": event_name, "data": parsed_data}
+                    )
 
 
 mcp = FastMCP(
@@ -719,6 +821,21 @@ async def restore_session_internal(session_id: str) -> dict[str, Any]:
 @app.get("/session/{session_id}")
 async def session_detail_internal(session_id: str) -> dict[str, Any]:
     return await _fetch_session_detail(session_id)
+
+
+@app.get("/events")
+async def internal_events(
+    sessionId: str | None = Query(default=None),
+) -> StreamingResponse:
+    return StreamingResponse(
+        _relay_global_events(sessionId),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/workspace/tree")

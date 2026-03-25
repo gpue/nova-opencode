@@ -1,6 +1,34 @@
 import { useState } from "react";
 import type { SessionMessage } from "../lib/types";
 
+function safeJsonStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  return (trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"));
+}
+
+function humanizeToolStatus(status: string): string {
+  switch (status) {
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "error":
+      return "Error";
+    case "pending":
+      return "Pending";
+    default:
+      return status;
+  }
+}
+
 function extractText(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (Array.isArray(value)) return value.map((item) => extractText(item)).filter(Boolean).join("\n").trim();
@@ -46,6 +74,16 @@ function extractToolCommand(part: Record<string, unknown>): string {
 }
 
 function extractToolOutput(part: Record<string, unknown>): string {
+  const state = part.state;
+  if (state && typeof state === "object") {
+    const stateRecord = state as Record<string, unknown>;
+    const completedOutput = stateRecord.output;
+    if (typeof completedOutput === "string" && completedOutput.trim()) return completedOutput.trim();
+    const errorOutput = stateRecord.error;
+    if (typeof errorOutput === "string" && errorOutput.trim()) return errorOutput.trim();
+    if (completedOutput && typeof completedOutput === "object") return safeJsonStringify(completedOutput);
+  }
+
   const result = part.result ?? part.output ?? part.content;
   if (typeof result === "string") return result.trim();
   if (result && typeof result === "object") {
@@ -73,6 +111,15 @@ function extractSuggestedOptions(part: Record<string, unknown>): string[] {
   return [];
 }
 
+function extractToolInput(part: Record<string, unknown>): unknown {
+  const state = part.state;
+  if (state && typeof state === "object") {
+    const input = (state as Record<string, unknown>).input;
+    if (input !== undefined) return input;
+  }
+  return part.input ?? part.arguments ?? part.args;
+}
+
 function formatQuestionDisplay(detail: string): string[] {
   const lines = detail
     .split("\n")
@@ -92,6 +139,14 @@ function extractRenderableText(message: SessionMessage): string {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function extractReasoningSummary(reasoning: string): string {
+  const lines = reasoning
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines[0] ?? "Thinking";
 }
 
 export function ConversationMessage({
@@ -134,14 +189,20 @@ export function ConversationMessage({
       )}
       {!showPendingStrip &&
         reasoningParts.map((reasoning, index) => (
-          <section key={`${message.id}-reasoning-${index}`} className="conversation-part conversation-reasoning">
-            <div className="conversation-part-label">Reasoning</div>
+          <details key={`${message.id}-reasoning-${index}`} className="conversation-part conversation-reasoning conversation-disclosure">
+            <summary className="conversation-disclosure-summary">
+              <div>
+                <div className="conversation-part-label">Thinking</div>
+                <div className="conversation-disclosure-title">{extractReasoningSummary(reasoning)}</div>
+              </div>
+              <span className="conversation-disclosure-hint">Show details</span>
+            </summary>
             <pre className="conversation-part-body">{reasoning}</pre>
-          </section>
+          </details>
         ))}
       {toolParts.map((part, index) => {
-        const state = (part as { state?: { status?: string } }).state;
-        const status = state?.status || "complete";
+        const state = (part as { state?: Record<string, unknown> & { status?: string } }).state;
+        const status = state?.status || "completed";
         const label = extractText((part as { tool?: unknown; name?: unknown }).tool) || extractText((part as { name?: unknown }).name) || "Tool";
         const detail = extractText(part);
         const isWaiting = status === "running";
@@ -152,16 +213,29 @@ export function ConversationMessage({
         const suggestedOptions = extractSuggestedOptions(part as Record<string, unknown>);
         const partRecord = part as Record<string, unknown>;
         const toolCommand = extractToolCommand(partRecord);
+        const toolInput = extractToolInput(partRecord);
         let toolOutput = extractToolOutput(partRecord);
         if (!toolOutput && toolCommand && detail && !questionLines.length) toolOutput = detail;
-        const showCommandOutput = (toolCommand || toolOutput) && (status === "complete" || status === "running");
+        const showCommandOutput = (toolCommand || toolOutput) && (status === "completed" || status === "running" || status === "error");
+        const fallbackJson = safeJsonStringify(partRecord);
+        const rawJson = toolOutput && looksLikeJson(toolOutput) ? toolOutput : fallbackJson;
+        const inputJson = toolInput === undefined ? "" : safeJsonStringify(toolInput);
+        const stateTitle = typeof state?.title === "string" ? state.title : "";
+        const summary = toolCommand || stateTitle || detail || `${label} ${humanizeToolStatus(status).toLowerCase()}`;
 
         return (
-          <section key={`${message.id}-tool-${index}`} className="conversation-part conversation-tool">
-            <div className="conversation-tool-head">
-              <div className="conversation-part-label">{`Step ${index + 1}: ${label}`}</div>
-              <span className={`conversation-tool-status ${status}`}>{status === "running" ? "Waiting for input" : status}</span>
-            </div>
+          <details key={`${message.id}-tool-${index}`} className="conversation-part conversation-tool conversation-disclosure" open={isWaiting}>
+            <summary className="conversation-disclosure-summary conversation-tool-head">
+              <div>
+                <div className="conversation-part-label">{`Tool ${index + 1}`}</div>
+                <div className="conversation-disclosure-title">{label}</div>
+                <div className="conversation-disclosure-subtitle">{summary}</div>
+              </div>
+              <div className="conversation-tool-head-meta">
+                <span className={`conversation-tool-status ${status}`}>{status === "running" ? "Running" : humanizeToolStatus(status)}</span>
+                <span className="conversation-disclosure-hint">Show JSON</span>
+              </div>
+            </summary>
             {questionLines.length ? (
               <ol className="conversation-tool-questions">
                 {questionLines.map((line, i) => (
@@ -181,9 +255,19 @@ export function ConversationMessage({
                 ) : null}
               </div>
             ) : null}
-            {!showCommandOutput && detail && !questionLines.length ? (
+            {!showCommandOutput && detail && !questionLines.length && !looksLikeJson(detail) ? (
               <pre className="conversation-part-body">{detail}</pre>
             ) : null}
+            {inputJson ? (
+              <details className="conversation-json-block">
+                <summary className="conversation-json-summary">Input JSON</summary>
+                <pre className="conversation-tool-output">{inputJson}</pre>
+              </details>
+            ) : null}
+            <details className="conversation-json-block">
+              <summary className="conversation-json-summary">Raw event JSON</summary>
+              <pre className="conversation-tool-output">{rawJson}</pre>
+            </details>
             {showForm ? (
               <div className="conversation-tool-actions">
                 <textarea
@@ -229,7 +313,7 @@ export function ConversationMessage({
                 </div>
               </div>
             ) : null}
-          </section>
+          </details>
         );
       })}
     </article>

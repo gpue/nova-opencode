@@ -102,3 +102,8 @@ export interface SessionProgressEvent {
   sessionID?: string;
   messageID?: string;
 }
+
+export interface StreamEnvelope<T = unknown> {
+  event?: string;
+  data?: T;
+}

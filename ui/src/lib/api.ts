@@ -14,6 +14,11 @@ import type {
 
 const base = "/cell/nova-opencode";
 
+export function getEventsUrl(sessionId?: string): string {
+  const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
+  return `${base}/events${params}`;
+}
+
 async function requestText(path: string, init?: RequestInit): Promise<string> {
   const response = await fetch(`${base}${path}`, {
     headers: {

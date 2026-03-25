@@ -20,6 +20,11 @@
 		reverse_proxy localhost:8081
 	}
 
+	handle {$BASE_PATH}/events {
+		uri strip_prefix {$BASE_PATH}
+		reverse_proxy localhost:8081
+	}
+
 	handle_path {$BASE_PATH}/api/* {
 		reverse_proxy localhost:4096
 	}

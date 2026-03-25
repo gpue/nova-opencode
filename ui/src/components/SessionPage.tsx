@@ -1,7 +1,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getComposerOptions, getSessionDetail, sendMessage, stopSession } from "../lib/api";
-import type { AgentMode, ComposerOptions, PromptOptions, ProviderModelOption, SessionDetail } from "../lib/types";
+import { getComposerOptions, getEventsUrl, getSessionDetail, sendMessage, stopSession } from "../lib/api";
+import type { AgentMode, ComposerOptions, PromptOptions, ProviderModelOption, SessionDetail, StreamEnvelope } from "../lib/types";
 import { ConversationMessage } from "./ConversationMessage";
 import { Icon } from "./Icon";
 import { TerminalPanel } from "./TerminalPanel";
@@ -45,8 +45,16 @@ export function SessionPage() {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
+    let refreshPending = false;
+    let refreshInFlight = false;
 
     const refresh = () => {
+      if (refreshInFlight) {
+        refreshPending = true;
+        return;
+      }
+
+      refreshInFlight = true;
       getSessionDetail(sessionId)
         .then((data) => {
           if (!cancelled) {
@@ -58,7 +66,12 @@ export function SessionPage() {
           if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load conversation");
         })
         .finally(() => {
+          refreshInFlight = false;
           if (!cancelled) setLoading(false);
+          if (refreshPending && !cancelled) {
+            refreshPending = false;
+            window.setTimeout(refresh, 0);
+          }
         });
     };
 
@@ -66,8 +79,17 @@ export function SessionPage() {
     refresh();
     const interval = window.setInterval(refresh, 2500);
 
-    const stream = new EventSource(`/cell/nova-opencode/api/global/event`);
-    stream.onmessage = () => refresh();
+    const stream = new EventSource(getEventsUrl(sessionId));
+    stream.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as StreamEnvelope;
+        if (!payload.event || payload.event.startsWith("message.") || payload.event.startsWith("session.")) {
+          refresh();
+        }
+      } catch {
+        refresh();
+      }
+    };
     stream.onerror = () => {};
 
     return () => {
