@@ -60,10 +60,14 @@ echo "====================="
 # Trap to clean up background processes
 cleanup() {
     echo "Shutting down..."
-    kill "$MCP_PID" "$OPENCODE_PID" 2>/dev/null || true
+    kill "$MCP_PID" "$OPENCODE_PID" "$SERVICE_REGISTRY_PID" 2>/dev/null || true
     wait 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+# Start the service registry for Cmd+K launcher discovery
+node /app/service-registry.mjs &
+SERVICE_REGISTRY_PID=$!
 
 # Start the MCP bridge server in the background
 python3 /app/mcp_bridge.py &
