@@ -73,9 +73,16 @@ RUN mkdir -p /workspace \
     && mkdir -p /caddy/config /caddy/data \
     && chown -R opencode:opencode /workspace /home/opencode /app /caddy
 
+# ── Install Node.js and nats for service registry ───────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+RUN npm install -g nats@2
+
 # ── Copy application files ──────────────────────────────────────────
 COPY --chown=opencode:opencode opencode.json /home/opencode/.config/opencode/opencode.json
 COPY --chown=opencode:opencode mcp_bridge.py /app/mcp_bridge.py
+COPY --chown=opencode:opencode service-registry.mjs /app/service-registry.mjs
 COPY --chown=opencode:opencode start-opencode.sh /app/start-opencode.sh
 COPY --chown=opencode:opencode Caddyfile /app/Caddyfile
 COPY --chown=opencode:opencode app_icon.svg /app/static/app_icon.svg
